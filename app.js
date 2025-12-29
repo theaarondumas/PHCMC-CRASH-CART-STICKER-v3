@@ -1,12 +1,3 @@
-/**
- * Crash Cart Batch v3
- * - Clears: firstSupply, cartNumber, drugName, initials by default
- * - Firestore real-time sync (central storage)
- * - LocalStorage + offline-friendly
- *
- * IMPORTANT: Keep PHI out (no patient identifiers).
- */
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
 import {
   getFirestore,
@@ -15,38 +6,35 @@ import {
   onSnapshot,
   serverTimestamp,
   enableIndexedDbPersistence
-} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js"; // CDN modular  [oai_citation:3‡Firebase](https://firebase.google.com/docs/web/alt-setup?utm_source=chatgpt.com)
+} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-const LOCAL_KEY = "cc_clean_batch_v3";
+const LOCAL_KEY = "cc_clean_batch_option3_dept_v1";
+const LOCAL_CODE_KEY = "cc_batch_code_dept_v1";
 
-document.addEventListener("DOMContentLoaded", async () => {
+document.addEventListener("DOMContentLoaded", () => {
   const $ = (id) => document.getElementById(id);
-  const debug = $("debug");
-  const cloudStatus = $("cloudStatus");
 
-  // ---------- Firebase CONFIG ----------
-  // Replace this with your Firebase web app config from Project Settings.
-  // (Firebase console → Project Settings → Your apps → SDK setup and config)
-  const firebaseConfig = {
-    apiKey: "PASTE_ME",
-    authDomain: "PASTE_ME",
-    projectId: "PASTE_ME",
-    storageBucket: "PASTE_ME",
-    messagingSenderId: "PASTE_ME",
-    appId: "PASTE_ME"
-  };
-
-  // If you haven’t pasted config yet, run local-only gracefully
-  const firebaseReady = Object.values(firebaseConfig).every(v => typeof v === "string" && v !== "PASTE_ME");
-
-  // Elements
   const els = {
+    // topbar dept dropdown
+    deptSelect: $("deptSelect"),
+
+    // batch code UI
+    batchCode: $("batchCode"),
+    btnJoin: $("btnJoin"),
+    btnCopyCode: $("btnCopyCode"),
+    btnRotateCode: $("btnRotateCode"),
+    cloudStatus: $("cloudStatus"),
+    footerBatch: $("footerBatch"),
+    debug: $("debug"),
+
+    // batch UI
     batchList: $("batchList"),
     btnPrintAll: $("btnPrintAll"),
     btnClear: $("btnClear"),
     btnSubmitCart: $("btnSubmitCart"),
     btnUnsubmitCart: $("btnUnsubmitCart"),
 
+    // inputs
     firstSupply: $("firstSupply"),
     cartNumber: $("cartNumber"),
     date: $("date"),
@@ -60,6 +48,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     initials: $("initials"),
     cartId: $("cartId"),
 
+    // sticker fields
     sFacility: $("sFacility"),
     sDept: $("sDept"),
     sPhone: $("sPhone"),
@@ -76,13 +65,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     sInitials: $("sInitials"),
   };
 
-  // Sanity check
-  const required = ["batchList","firstSupply","cartNumber","sCartNum","btnPrintAll","cloudStatus"];
-  const missing = required.filter(id => !$(id));
-  if (missing.length) {
-    if (debug) debug.textContent = `Missing elements: ${missing.join(", ")} (wrong file/cached page).`;
-    return;
-  }
+  // ---------- Firebase CONFIG ----------
+  // Paste your real Firebase config here:
+  const firebaseConfig = {
+    apiKey: "PASTE_ME",
+    authDomain: "PASTE_ME",
+    projectId: "PASTE_ME",
+    storageBucket: "PASTE_ME",
+    messagingSenderId: "PASTE_ME",
+    appId: "PASTE_ME"
+  };
+
+  const firebaseReady = Object.values(firebaseConfig).every(
+    v => typeof v === "string" && v !== "PASTE_ME"
+  );
 
   // ---------- Helpers ----------
   const todayISO = () => {
@@ -93,25 +89,52 @@ document.addEventListener("DOMContentLoaded", async () => {
     return `${yyyy}-${mm}-${dd}`;
   };
 
-  // Central doc id: facility + date (simple default)
-  const batchDocId = () => {
-    // If you later want multiple units/facilities, we can expose this as a dropdown.
-    const facilitySlug = "phc"; // keep simple; we can compute from header later
-    return `${facilitySlug}-${todayISO()}`;
+  const prettyDate = (yyyyMmDd) => {
+    const [y, m, d] = yyyyMmDd.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    return dt.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" });
   };
 
+  const escapeHtml = (str) => String(str ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+
+  const normalizeCode = (code) =>
+    String(code || "").trim().replace(/\s+/g, "-").toUpperCase();
+
+  const deptSlug = (name) => {
+    return String(name || "")
+      .toUpperCase()
+      .replaceAll("&", "AND")
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  };
+
+  function getDeviceId() {
+    const key = "cc_device_id";
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const id = "dev_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
+    localStorage.setItem(key, id);
+    return id;
+  }
+
+  // ---------- State ----------
   const blankCart = (id) => ({
     id,
     status: "Draft",
     completedAt: null,
 
-    // CLEARED BY DEFAULT (your request)
+    // CLEARED by default
     firstSupply: "",
     cartNumber: "",
     drugName: "",
     initials: "",
 
-    // Keep these defaults
+    // keep defaults
     date: todayISO(),
     checkDone: todayISO(),
     tech: "",
@@ -136,91 +159,189 @@ document.addEventListener("DOMContentLoaded", async () => {
     },
     meta: {
       updatedAtLocal: Date.now(),
-      updatedByDevice: getDeviceId()
+      updatedByDevice: getDeviceId(),
     }
   });
 
-  function getDeviceId() {
-    const key = "cc_device_id";
-    const existing = localStorage.getItem(key);
-    if (existing) return existing;
-    const id = "dev_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
-    localStorage.setItem(key, id);
-    return id;
-  }
-
-  function prettyDate(yyyyMmDd) {
-    const [y, m, d] = yyyyMmDd.split("-").map(Number);
-    const dt = new Date(y, m - 1, d);
-    return dt.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" });
-  }
-
-  function escapeHtml(str) {
-    return String(str ?? "")
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
-  }
-
-  // ---------- State ----------
   let state = loadLocal() || defaultState();
 
-  // ---------- Firestore (real-time) ----------
+  // ---------- Firestore ----------
   let db = null;
-  let cloudDocRef = null;
+  let unsubscribe = null;
+  let currentDocRef = null;
   let suppressNextCloudWrite = false;
   let saveTimer = null;
 
   if (firebaseReady) {
-    try {
-      const app = initializeApp(firebaseConfig);
-      db = getFirestore(app);
-      cloudDocRef = doc(db, "crashCartBatches", batchDocId());
-
-      // Offline cache for Firestore (best effort)
-      enableIndexedDbPersistence(db).catch(() => { /* ignore */ });
-
-      // Live subscribe
-      onSnapshot(cloudDocRef, (snap) => {
-        if (!snap.exists()) {
-          cloudStatus.textContent = `Cloud: ready • doc will be created (${batchDocId()})`;
-          return;
-        }
-        const cloud = snap.data();
-
-        // Basic last-write-wins using updatedAtLocal
-        const cloudUpdated = cloud?.meta?.updatedAtLocal || 0;
-        const localUpdated = state?.meta?.updatedAtLocal || 0;
-
-        if (cloudUpdated > localUpdated) {
-          suppressNextCloudWrite = true;
-          state = cloud;
-          saveLocal();            // keep local in sync
-          renderAll();
-          cloudStatus.textContent = `Cloud: synced • updated`;
-        } else {
-          cloudStatus.textContent = `Cloud: listening • up to date`;
-        }
-      });
-
-      cloudStatus.textContent = `Cloud: connected • live sync ON`;
-    } catch (e) {
-      cloudStatus.textContent = `Cloud: error (running local-only)`;
-      if (debug) debug.textContent = `Firebase init error: ${String(e)}`;
-    }
-  } else {
-    cloudStatus.textContent = `Cloud: OFF (paste Firebase config in app.js)`;
+    const app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    enableIndexedDbPersistence(db).catch(() => {});
   }
 
-  // ---------- Init render + bindings ----------
-  renderAll();
+  // ---------- Department dropdown init ----------
+  if (els.deptSelect) {
+    els.deptSelect.value = state.header.dept || "Central Department";
+  }
+
+  // default batch code includes department + date
+  const defaultCode = () => {
+    const dept = state?.header?.dept || "Central Department";
+    return `PHC-${todayISO().replaceAll("-","")}-${deptSlug(dept)}-DAY`;
+  };
+
+  els.batchCode.value = localStorage.getItem(LOCAL_CODE_KEY) || defaultCode();
+  updateFooter();
+
+  // ---------- Department change behavior ----------
+  els.deptSelect.addEventListener("change", () => {
+    const newDept = els.deptSelect.value;
+
+    // update header + sticker
+    state.header.dept = newDept;
+
+    // set batch code to match dept + date
+    const base = `PHC-${todayISO().replaceAll("-","")}-${deptSlug(newDept)}-DAY`;
+    els.batchCode.value = base;
+    localStorage.setItem(LOCAL_CODE_KEY, base);
+    updateFooter();
+
+    touchMeta();
+    saveLocal();
+    renderAll();
+
+    // join/sync the new room
+    joinBatch(base);
+  });
+
+  // ---------- Batch code actions ----------
+  els.btnJoin.addEventListener("click", () => joinBatch(els.batchCode.value));
+
+  els.btnCopyCode.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(normalizeCode(els.batchCode.value));
+      els.cloudStatus.textContent = "Batch Code copied ✅";
+    } catch {
+      els.cloudStatus.textContent = "Copy blocked — select + copy manually.";
+    }
+  });
+
+  els.btnRotateCode.addEventListener("click", () => {
+    const rotated = rotateCode();
+    els.batchCode.value = rotated;
+    joinBatch(rotated);
+  });
+
+  // auto-join on load
+  joinBatch(els.batchCode.value);
+
+  // ---------- Bind UI ----------
   bindLiveInputs();
   bindButtons();
+  renderAll();
+  els.debug.textContent = "App running ✅";
 
-  if (debug) debug.textContent = "App running ✅";
+  function rotateCode() {
+    const dept = state?.header?.dept || "Central Department";
+    const rand = Math.random().toString(16).slice(2, 6).toUpperCase();
+    return `PHC-${todayISO().replaceAll("-","")}-${deptSlug(dept)}-DAY-${rand}`;
+  }
 
+  function updateFooter() {
+    els.footerBatch.textContent = `Batch Code: ${normalizeCode(els.batchCode.value) || "—"}`;
+  }
+
+  function touchMeta() {
+    state.meta = state.meta || {};
+    state.meta.updatedAtLocal = Date.now();
+    state.meta.updatedByDevice = getDeviceId();
+  }
+
+  function joinBatch(rawCode) {
+    const code = normalizeCode(rawCode);
+    if (!code) {
+      els.cloudStatus.textContent = "Enter a Batch Code.";
+      return;
+    }
+
+    localStorage.setItem(LOCAL_CODE_KEY, code);
+    els.batchCode.value = code;
+    updateFooter();
+
+    if (!firebaseReady || !db) {
+      els.cloudStatus.textContent = "Cloud: OFF (paste Firebase config in app.js)";
+      return;
+    }
+
+    if (unsubscribe) {
+      unsubscribe();
+      unsubscribe = null;
+    }
+
+    currentDocRef = doc(db, "crashCartBatches", code);
+    els.cloudStatus.textContent = `Cloud: connecting… (${code})`;
+
+    unsubscribe = onSnapshot(currentDocRef, (snap) => {
+      if (!snap.exists()) {
+        els.cloudStatus.textContent = `Cloud: ready • doc will be created (${code})`;
+        return;
+      }
+
+      const cloud = snap.data();
+      const cloudUpdated = cloud?.meta?.updatedAtLocal || 0;
+      const localUpdated = state?.meta?.updatedAtLocal || 0;
+
+      if (cloudUpdated > localUpdated) {
+        suppressNextCloudWrite = true;
+        state = cloud;
+
+        // keep dept dropdown in sync with cloud
+        if (els.deptSelect && state?.header?.dept) {
+          els.deptSelect.value = state.header.dept;
+        }
+
+        saveLocal();
+        renderAll();
+        els.cloudStatus.textContent = `Cloud: synced • ${code}`;
+      } else {
+        els.cloudStatus.textContent = `Cloud: listening • ${code}`;
+      }
+    });
+
+    // create doc if needed
+    scheduleCloudSave(true);
+  }
+
+  function scheduleCloudSave(immediate = false) {
+    if (!firebaseReady || !currentDocRef) return;
+
+    if (suppressNextCloudWrite) {
+      suppressNextCloudWrite = false;
+      return;
+    }
+
+    if (saveTimer) clearTimeout(saveTimer);
+    const delay = immediate ? 0 : 450;
+
+    saveTimer = setTimeout(async () => {
+      try {
+        els.cloudStatus.textContent = `Cloud: saving… (${normalizeCode(els.batchCode.value)})`;
+        const payload = {
+          ...state,
+          meta: {
+            ...state.meta,
+            updatedAtServer: serverTimestamp(),
+          }
+        };
+        await setDoc(currentDocRef, payload, { merge: true });
+        els.cloudStatus.textContent = `Cloud: saved ✅ (${normalizeCode(els.batchCode.value)})`;
+      } catch (e) {
+        els.cloudStatus.textContent = "Cloud: save failed (local ok)";
+        els.debug.textContent = `Cloud save error: ${String(e)}`;
+      }
+    }, delay);
+  }
+
+  // ---------- Live inputs ----------
   function bindLiveInputs() {
     const map = [
       ["firstSupply", "firstSupply"],
@@ -240,7 +361,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         const c = getActive();
         c[stateKey] = e.target.value;
 
-        // Keep dots honest: editing flips back to Draft
         if (c.status === "Completed") {
           c.status = "Draft";
           c.completedAt = null;
@@ -249,13 +369,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         touchMeta();
         saveLocal();
         renderAll();
-
-        // Debounced cloud save
-        scheduleCloudSave();
+        scheduleCloudSave(false);
       });
     });
   }
 
+  // ---------- Buttons ----------
   function bindButtons() {
     els.btnSubmitCart.addEventListener("click", () => {
       const c = getActive();
@@ -264,7 +383,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       touchMeta();
       saveLocal();
       renderAll();
-      scheduleCloudSave();
+      scheduleCloudSave(false);
     });
 
     els.btnUnsubmitCart.addEventListener("click", () => {
@@ -274,58 +393,29 @@ document.addEventListener("DOMContentLoaded", async () => {
       touchMeta();
       saveLocal();
       renderAll();
-      scheduleCloudSave();
+      scheduleCloudSave(false);
     });
 
     els.btnClear.addEventListener("click", () => {
-      if (!confirm("Clear ALL saved data (local + cloud doc)?")) return;
+      if (!confirm("Clear ALL saved data (local + this batch doc)?")) return;
       state = defaultState();
+
+      // keep dept dropdown value in sync with reset
+      if (els.deptSelect) els.deptSelect.value = state.header.dept;
+
+      // reset batch code to dept/date default
+      const base = defaultCode();
+      els.batchCode.value = base;
+      localStorage.setItem(LOCAL_CODE_KEY, base);
+      updateFooter();
+
       touchMeta();
       saveLocal();
       renderAll();
-      scheduleCloudSave(true);
+      joinBatch(base);
     });
 
-    els.btnPrintAll.addEventListener("click", () => {
-      openPrintAll();
-    });
-  }
-
-  function touchMeta() {
-    state.meta = state.meta || {};
-    state.meta.updatedAtLocal = Date.now();
-    state.meta.updatedByDevice = getDeviceId();
-  }
-
-  function scheduleCloudSave(immediate = false) {
-    if (!firebaseReady || !cloudDocRef) return;
-
-    if (suppressNextCloudWrite) {
-      suppressNextCloudWrite = false;
-      return;
-    }
-
-    if (saveTimer) clearTimeout(saveTimer);
-    const delay = immediate ? 0 : 450;
-
-    saveTimer = setTimeout(async () => {
-      try {
-        cloudStatus.textContent = "Cloud: saving…";
-        // store a server timestamp too (nice for audit)
-        const payload = {
-          ...state,
-          meta: {
-            ...state.meta,
-            updatedAtServer: serverTimestamp()
-          }
-        };
-        await setDoc(cloudDocRef, payload, { merge: true });
-        cloudStatus.textContent = "Cloud: saved ✅";
-      } catch (e) {
-        cloudStatus.textContent = "Cloud: save failed (local ok)";
-        if (debug) debug.textContent = `Cloud save error: ${String(e)}`;
-      }
-    }, delay);
+    els.btnPrintAll.addEventListener("click", () => openPrintAll());
   }
 
   // ---------- Rendering ----------
@@ -361,7 +451,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         touchMeta();
         saveLocal();
         renderAll();
-        scheduleCloudSave();
+        scheduleCloudSave(false);
       });
 
       els.batchList.appendChild(btn);
@@ -374,16 +464,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     els.cartId.value = c.id;
 
     els.firstSupply.value = c.firstSupply || "";
-    els.cartNumber.value = c.cartNumber || "";      // stays blank unless you type
+    els.cartNumber.value = c.cartNumber || "";
     els.date.value = c.date || todayISO();
     els.checkDone.value = c.checkDone || todayISO();
     els.tech.value = c.tech || "";
 
     els.firstDrugExp.value = c.firstDrugExp || "";
-    els.drugName.value = c.drugName || "";          // stays blank unless you type
+    els.drugName.value = c.drugName || "";
     els.lockNumber.value = c.lockNumber || "";
     els.drugCheckDone.value = c.drugCheckDone || "";
-    els.initials.value = c.initials || "";          // stays blank unless you type
+    els.initials.value = c.initials || "";
   }
 
   function renderSticker(c) {
@@ -437,12 +527,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     `;
 
     const ids = ["CC-01","CC-02","CC-03","CC-04"];
+    const code = escapeHtml(normalizeCode(els.batchCode.value));
+
     const blocks = ids.map(id => {
       const c = state.carts[id];
       const status = c.status === "Completed" ? "COMPLETED" : "DRAFT";
 
       return `
-        <div class="badge">${id} • ${status}</div>
+        <div class="badge">${id} • ${status} • ${code}</div>
 
         <div class="sticker green">
           <div class="header">
@@ -479,11 +571,15 @@ document.addEventListener("DOMContentLoaded", async () => {
       <head><meta charset="utf-8"><title>Crash Cart Batch Print</title><style>${css}</style></head>
       <body>
         <button onclick="window.print()">Print / Save as PDF</button>
-        <h1>Crash Cart Batch</h1>
+        <h1>Crash Cart Batch • ${code}</h1>
         <div class="grid">${blocks}</div>
       </body>
       </html>
     `;
+  }
+
+  function getActive() {
+    return state.carts[state.active];
   }
 
   // ---------- Local storage ----------
@@ -498,9 +594,5 @@ document.addEventListener("DOMContentLoaded", async () => {
     } catch {
       return null;
     }
-  }
-
-  function getActive() {
-    return state.carts[state.active];
   }
 });
