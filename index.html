@@ -4,235 +4,137 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#0b0c10" />
-  <title>Crash Cart Batch</title>
+  <title>Crash Cart Digital Stickers (Batch)</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 
 <body>
   <header class="topbar">
-    <div class="brand">
-      <div class="logo">CC</div>
-      <div>
-        <div class="title">Crash Cart Batch</div>
-        <div class="subtitle">Digital sticker + batch submission (PHI-free)</div>
-      </div>
+    <div class="topbar-left">
+      <div class="h1">Crash Cart Digital Stickers</div>
+      <div class="sub">Live labels • auto-save • print-ready</div>
     </div>
 
-    <nav class="tabs" role="tablist" aria-label="Sections">
-      <button class="tab active" data-tab="builder" role="tab" aria-selected="true">Sticker Builder</button>
-      <button class="tab" data-tab="batch" role="tab" aria-selected="false">Batch Review</button>
-      <button class="tab" data-tab="settings" role="tab" aria-selected="false">Settings</button>
-    </nav>
+    <div class="topbar-right">
+      <button id="btnPrintAll" class="btn primary">Print / Export PDF</button>
+      <button id="btnClear" class="btn ghost">Clear</button>
+    </div>
   </header>
 
   <main class="wrap">
-    <!-- BUILDER -->
-    <section id="tab-builder" class="panel active" role="tabpanel">
-      <div class="grid">
-        <div class="card">
-          <div class="cardHead">
-            <h2>Crash Cart Entry</h2>
-            <div class="row gap">
-              <button id="btnNewCart" class="btn">+ New Cart</button>
-              <button id="btnDupCart" class="btn ghost">Duplicate</button>
-              <button id="btnSaveCart" class="btn primary">Save</button>
-            </div>
-          </div>
 
-          <div class="row">
-            <label class="field">
-              <span>Active Cart</span>
-              <select id="cartSelect"></select>
-            </label>
+    <!-- BATCH SELECTOR -->
+    <section class="card">
+      <div class="card-title">4-Cart Batch</div>
+      <div class="batch" id="batchList"></div>
 
-            <label class="field">
-              <span>Status</span>
-              <input id="statusBadge" class="pill" type="text" readonly />
-            </label>
-          </div>
+      <div class="batch-actions">
+        <button id="btnSubmitCart" class="btn">Mark Active Cart Completed</button>
+        <button id="btnUnsubmitCart" class="btn ghost">Mark Active Cart Draft</button>
+      </div>
+      <div class="hint">Green dot = completed. Tap a cart to open it.</div>
+    </section>
 
-          <div class="row">
-            <label class="field">
-              <span>Facility</span>
-              <input id="facility" type="text" placeholder="Providence Holy Cross" />
-            </label>
-            <label class="field">
-              <span>Unit / Area</span>
-              <input id="unit" type="text" placeholder="ICU / ED / Med Surg" />
-            </label>
-          </div>
-
-          <div class="row">
-            <label class="field">
-              <span>Cart ID</span>
-              <input id="cartId" type="text" placeholder="CC-01" />
-            </label>
-            <label class="field">
-              <span>Seal #</span>
-              <input id="seal" type="text" placeholder="123456" inputmode="numeric" />
-            </label>
-          </div>
-
-          <div class="row">
-            <label class="field">
-              <span>Check Date</span>
-              <input id="checkDate" type="date" />
-            </label>
-            <label class="field">
-              <span>Checked By (Name)</span>
-              <input id="checkedBy" type="text" placeholder="Your name" />
-            </label>
-          </div>
-
-          <label class="field">
-            <span>Notes (optional)</span>
-            <input id="notes" type="text" placeholder="Any issues, missing items, etc." />
-          </label>
-
-          <div class="divider"></div>
-
-          <div class="cardHead">
-            <h3>Supply Log (optional)</h3>
-            <div class="row gap">
-              <button id="btnAddItem" class="btn">+ Add Item</button>
-              <button id="btnClearItems" class="btn ghost">Clear Items</button>
-            </div>
-          </div>
-
-          <div class="tableWrap">
-            <table class="table" aria-label="Supply items">
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Par</th>
-                  <th>Qty</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="itemsBody"></tbody>
-            </table>
-          </div>
-
-          <div class="hint">
-            Guardrail: keep this PHI-free (no patient names, MRNs, room numbers).
-          </div>
+    <!-- STICKER PREVIEW (LIKE YOUR FORMAT) -->
+    <section class="stickerWrap">
+      <div class="sticker green">
+        <div class="stickerHeader">
+          <div class="facility" id="sFacility">Providence Holy Cross Hospital</div>
+          <div class="dept" id="sDept">Central Department</div>
+          <div class="phone" id="sPhone">818-496-1190</div>
         </div>
 
-        <!-- STICKER PREVIEW -->
-        <div class="card">
-          <div class="cardHead">
-            <h2>Digital Sticker Preview</h2>
-            <div class="row gap">
-              <button id="btnOpenPrint" class="btn">Open Printable</button>
-              <button id="btnExportCSV" class="btn ghost">Download CSV</button>
-            </div>
-          </div>
+        <div class="stickerTitle">CRASH CART CHECK</div>
 
-          <div id="sticker" class="sticker" aria-label="Sticker preview">
-            <div class="stickerTop">
-              <div class="stickerFacility" id="sFacility">Providence Holy Cross</div>
-              <div class="stickerMeta">
-                <div><span class="muted">UNIT</span> <span id="sUnit">—</span></div>
-                <div><span class="muted">CART</span> <span id="sCartId">—</span></div>
-              </div>
-            </div>
+        <div class="stickerLines">
+          <div class="lineRow"><span>First supply to expire:</span><span class="fill" id="sFirstSupply">—</span></div>
+          <div class="lineRow"><span>Date:</span><span class="fill" id="sDate">—</span></div>
+          <div class="lineRow"><span>Check Date done:</span><span class="fill" id="sCheckDone">—</span></div>
+          <div class="lineRow"><span>CS tech:</span><span class="fill" id="sTech">—</span></div>
+        </div>
+      </div>
 
-            <div class="stickerMid">
-              <div class="stickerSeal">
-                <div class="muted">SEAL #</div>
-                <div class="sealNum" id="sSeal">—</div>
-              </div>
+      <div class="sticker orange">
+        <div class="stickerTitle small">Crash Cart Check</div>
 
-              <div class="stickerRight">
-                <div class="stickerRow"><span class="muted">CHECKED</span> <span id="sDate">—</span></div>
-                <div class="stickerRow"><span class="muted">BY</span> <span id="sBy">—</span></div>
-                <div class="stickerRow"><span class="muted">STATUS</span> <span id="sStatus">Draft</span></div>
-              </div>
-            </div>
-
-            <div class="stickerBottom">
-              <div class="muted">NOTES</div>
-              <div id="sNotes" class="notes">—</div>
-            </div>
-          </div>
-
-          <div class="divider"></div>
-
-          <h3>Active Cart Summary</h3>
-          <div id="summary" class="summary"></div>
+        <div class="stickerLines">
+          <div class="lineRow"><span>First Drug to Exp:</span><span class="fill" id="sFirstDrug">—</span></div>
+          <div class="lineRow"><span>Name of Drug:</span><span class="fill" id="sDrugName">—</span></div>
+          <div class="lineRow"><span>Lock Number:</span><span class="fill" id="sLock">—</span></div>
+          <div class="lineRow"><span>Check done on:</span><span class="fill" id="sDrugCheckDone">—</span></div>
+          <div class="lineRow"><span>Initials:</span><span class="fill" id="sInitials">—</span></div>
         </div>
       </div>
     </section>
 
-    <!-- BATCH -->
-    <section id="tab-batch" class="panel" role="tabpanel">
-      <div class="card">
-        <div class="cardHead">
-          <h2>Batch Review</h2>
-          <div class="row gap">
-            <button id="btnSubmitBatch" class="btn primary">Submit Batch</button>
-            <button id="btnOpenBatchPrint" class="btn">Open Printable (Batch)</button>
-            <button id="btnBatchCSV" class="btn ghost">Download CSV (Batch)</button>
-          </div>
-        </div>
+    <!-- FORMS (CLEAN) -->
+    <section class="card">
+      <div class="card-title">Crash Cart Check</div>
 
-        <div class="hint">
-          “Submit Batch” locks all Draft carts and timestamps them as Submitted.
-        </div>
+      <div class="grid2">
+        <label class="field">
+          <span>First supply to expire</span>
+          <input id="firstSupply" type="text" placeholder="TEMP PACING CATH KIT" />
+        </label>
 
-        <div class="tableWrap">
-          <table class="table" aria-label="Batch carts">
-            <thead>
-              <tr>
-                <th>Cart</th>
-                <th>Unit</th>
-                <th>Seal</th>
-                <th>Checked By</th>
-                <th>Date</th>
-                <th>Status</th>
-                <th>Submitted</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="batchBody"></tbody>
-          </table>
-        </div>
+        <label class="field">
+          <span>Date</span>
+          <input id="date" type="date" />
+        </label>
+
+        <label class="field">
+          <span>Check date done</span>
+          <input id="checkDone" type="date" />
+        </label>
+
+        <label class="field">
+          <span>CS tech</span>
+          <input id="tech" type="text" placeholder="CS Tech Name" />
+        </label>
       </div>
     </section>
 
-    <!-- SETTINGS -->
-    <section id="tab-settings" class="panel" role="tabpanel">
-      <div class="card">
-        <div class="cardHead">
-          <h2>Settings</h2>
-          <div class="row gap">
-            <button id="btnSeedFour" class="btn">Create 4 Carts</button>
-            <button id="btnClearAll" class="btn danger">Clear All Data</button>
-          </div>
-        </div>
+    <section class="card">
+      <div class="card-title">Medication Sticker</div>
 
-        <div class="row">
-          <label class="field">
-            <span>Default Facility</span>
-            <input id="defaultFacility" type="text" placeholder="Providence Holy Cross" />
-          </label>
-          <label class="field">
-            <span>Default Unit</span>
-            <input id="defaultUnit" type="text" placeholder="ED / ICU / Med Surg" />
-          </label>
-        </div>
+      <div class="grid2">
+        <label class="field">
+          <span>First drug to exp</span>
+          <input id="firstDrugExp" type="date" />
+        </label>
 
-        <div class="hint">
-          Data is stored locally on this device (LocalStorage). No cloud, no PHI.
-        </div>
+        <label class="field">
+          <span>Name of drug</span>
+          <input id="drugName" type="text" placeholder="EPINEPHRINE" />
+        </label>
+
+        <label class="field">
+          <span>Lock number</span>
+          <input id="lockNumber" type="text" placeholder="273947" inputmode="numeric" />
+        </label>
+
+        <label class="field">
+          <span>Check done on</span>
+          <input id="drugCheckDone" type="date" />
+        </label>
+
+        <label class="field">
+          <span>Initials</span>
+          <input id="initials" type="text" placeholder="AD" />
+        </label>
+
+        <label class="field">
+          <span>Cart ID (Active)</span>
+          <input id="cartId" type="text" readonly />
+        </label>
       </div>
     </section>
+
   </main>
 
   <footer class="footer">
-    <span>Crash Cart Batch • v1</span>
-    <span class="muted">PHI-free • Offline-ready (LocalStorage)</span>
+    <span>Batch: CC-01 → CC-04</span>
+    <span class="muted">Auto-saved • Local only</span>
   </footer>
 
   <script src="app.js"></script>
