@@ -23,6 +23,7 @@
 
   <main class="wrap">
 
+    <!-- BATCH SELECTOR -->
     <section class="card">
       <div class="card-title">4-Cart Batch</div>
       <div class="batch" id="batchList"></div>
@@ -36,7 +37,9 @@
       <div id="debug" class="hint"></div>
     </section>
 
+    <!-- STICKERS (MATCH YOUR CLEAN FORMAT) -->
     <section class="stickerWrap">
+      <!-- GREEN / YELLOW STICKER -->
       <div class="sticker green">
         <div class="stickerHeader">
           <div class="facility" id="sFacility">Providence Holy Cross Hospital</div>
@@ -48,12 +51,14 @@
 
         <div class="stickerLines">
           <div class="lineRow"><span>First supply to expire:</span><span class="fill" id="sFirstSupply">—</span></div>
+          <div class="lineRow"><span>Cart #:</span><span class="fill" id="sCartNum">—</span></div>
           <div class="lineRow"><span>Date:</span><span class="fill" id="sDate">—</span></div>
           <div class="lineRow"><span>Check Date done:</span><span class="fill" id="sCheckDone">—</span></div>
           <div class="lineRow"><span>CS tech:</span><span class="fill" id="sTech">—</span></div>
         </div>
       </div>
 
+      <!-- ORANGE STICKER -->
       <div class="sticker orange">
         <div class="stickerTitle small">Crash Cart Check</div>
 
@@ -67,6 +72,7 @@
       </div>
     </section>
 
+    <!-- FORMS -->
     <section class="card">
       <div class="card-title">Crash Cart Check</div>
 
@@ -74,6 +80,11 @@
         <label class="field">
           <span>First supply to expire</span>
           <input id="firstSupply" type="text" placeholder="TEMP PACING CATH KIT" />
+        </label>
+
+        <label class="field">
+          <span>Cart #</span>
+          <input id="cartNumber" type="text" placeholder="CC-01" />
         </label>
 
         <label class="field">
@@ -123,7 +134,7 @@
         </label>
 
         <label class="field">
-          <span>Cart ID (Active)</span>
+          <span>Active Batch Cart</span>
           <input id="cartId" type="text" readonly />
         </label>
       </div>
