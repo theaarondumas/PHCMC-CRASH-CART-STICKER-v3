@@ -1,5 +1,6 @@
 /* =========================================================
    UnitFlow — Department + Cart Type Checklists
+   ✅ Live sticker preview while typing
    ✅ Local autosave
    ✅ CSV export
    ✅ Firestore realtime sync (optional)
@@ -17,8 +18,9 @@ import {
   enableIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-// -------------------- Firebase Config --------------------
-// Use YOUR real config (apiKey etc. is OK for client apps; rules must protect data)
+/* -------------------- Firebase Config --------------------
+   NOTE: Client config is normal. Real security is Firestore Rules.
+---------------------------------------------------------- */
 const firebaseConfig = {
   apiKey: "AIzaSyB-3bjNKIf-00cRu3HtxdsjnM",
   authDomain: "phcmc-crash-cart.firebaseapp.com",
@@ -33,27 +35,23 @@ const firebaseReady =
   typeof firebaseConfig.projectId === "string" &&
   firebaseConfig.projectId.length > 0;
 
-// -------------------- DOM --------------------
+/* -------------------- DOM -------------------- */
 const departmentSelect = document.getElementById("departmentSelect");
 const cartTypeSelect = document.getElementById("cartTypeSelect");
 const checklistContainer = document.getElementById("checklistContainer");
 const statusLine = document.getElementById("statusLine");
 const btnClear = document.getElementById("btnClear");
 const btnExport = document.getElementById("btnExport");
+const stickerPreview = document.getElementById("stickerPreview");
+const cloudStatusEl = document.getElementById("cloudStatus");
 
-// Optional elements (only used if you add them later)
-const batchCodeEl = document.getElementById("batchCode");     // optional input
-const btnJoinEl   = document.getElementById("btnJoin");       // optional button
-const cloudStatusEl = document.getElementById("cloudStatus"); // optional label/span
-
-// -------------------- Local Keys --------------------
+/* -------------------- Local Keys -------------------- */
 function storageKey(dept, type) {
   return `unitflow_checklist_${dept || "NONE"}_${type || "NONE"}`;
 }
 const DEVICE_KEY = "unitflow_device_id";
-const CLOUD_CODE_KEY = "unitflow_cloud_code_v1";
 
-// -------------------- Helpers --------------------
+/* -------------------- Helpers -------------------- */
 function setStatus(msg) {
   if (statusLine) statusLine.textContent = msg;
 }
@@ -96,7 +94,7 @@ function escapeCSV(val) {
   return s;
 }
 
-// -------------------- Cart Definitions (edit anytime) --------------------
+/* -------------------- Cart Definitions -------------------- */
 const CART_DEFS = {
   adult: {
     title: "Adult Crash Cart",
@@ -111,6 +109,7 @@ const CART_DEFS = {
       { name: "Central Backup Carts", rows: ["Backup #1", "Backup #2", "Backup #3", "Backup #4"] }
     ]
   },
+
   neonatal: {
     title: "Neonatal Crash Cart",
     columns: ["Location", "Cart #", "Central Exp", "Med Box Exp", "Checked By", "Notes"],
@@ -121,6 +120,7 @@ const CART_DEFS = {
       { name: "Central Backup Carts", rows: ["Backup #1", "Backup #2", "Backup #3", "Backup #4", "Backup #5"] }
     ]
   },
+
   broselow: {
     title: "Broselow Cart",
     columns: ["Area", "Cart #", "Central Exp", "Med Box Exp", "Checked By", "Notes"],
@@ -133,7 +133,7 @@ const CART_DEFS = {
   }
 };
 
-// -------------------- State --------------------
+/* -------------------- State -------------------- */
 function defaultState() {
   return {
     rows: {}, // keyed by rowId
@@ -173,53 +173,29 @@ function touchMeta(state, dept, type) {
   state.meta.cartType = type;
 }
 
-// -------------------- Firestore Sync --------------------
+/* -------------------- Firestore Sync -------------------- */
 let db = null;
 let currentDocRef = null;
 let unsubscribe = null;
 let suppressNextCloudWrite = false;
 let saveTimer = null;
 
-function buildDefaultBatchCode(dept) {
-  // Auto code: UF-YYYYMMDD-DEPT-DAY
-  return `UF-${yyyymmdd()}-${deptSlug(dept || "DEPT")}-DAY`;
+function defaultBatchCode(dept) {
+  return normalizeCode(`UF-${yyyymmdd()}-${deptSlug(dept || "DEPT")}-DAY`);
 }
 
-function getBatchCode(dept) {
-  // Priority:
-  // 1) UI input if present
-  // 2) stored last code
-  // 3) auto generated
-  const ui = batchCodeEl ? normalizeCode(batchCodeEl.value) : "";
-  if (ui) return ui;
-
-  const saved = localStorage.getItem(CLOUD_CODE_KEY);
-  if (saved) return normalizeCode(saved);
-
-  const auto = buildDefaultBatchCode(dept);
-  return normalizeCode(auto);
-}
-
-function setBatchCode(code) {
-  const norm = normalizeCode(code);
-  localStorage.setItem(CLOUD_CODE_KEY, norm);
-  if (batchCodeEl) batchCodeEl.value = norm;
-}
-
-function cloudDocId(batchCode, dept, type) {
-  // One document per (batch + department + cart type)
-  // Keeps data separated cleanly
-  return `${normalizeCode(batchCode)}__${deptSlug(dept)}__${String(type).toUpperCase()}`;
+function cloudDocId(dept, type) {
+  // One doc per dept + cart type per day
+  const base = defaultBatchCode(dept);
+  return `${base}__${deptSlug(dept)}__${String(type).toUpperCase()}`;
 }
 
 function connectFirestore() {
   if (!firebaseReady) return;
-
   const app = initializeApp(firebaseConfig);
   db = getFirestore(app);
-
-  // Offline cache (good for hospital wifi)
   enableIndexedDbPersistence(db).catch(() => {});
+  setCloudStatus("Cloud: ready");
 }
 
 function joinCloudRoom(dept, type) {
@@ -228,23 +204,19 @@ function joinCloudRoom(dept, type) {
     return;
   }
 
-  const batchCode = getBatchCode(dept);
-  setBatchCode(batchCode);
+  const id = cloudDocId(dept, type);
 
-  // Cleanly switch listeners
   if (unsubscribe) {
     unsubscribe();
     unsubscribe = null;
   }
 
-  const id = cloudDocId(batchCode, dept, type);
   currentDocRef = doc(db, "unitflowChecklists", id);
-  setCloudStatus(`Cloud: connecting… (${batchCode})`);
+  setCloudStatus(`Cloud: connecting…`);
 
   unsubscribe = onSnapshot(currentDocRef, (snap) => {
     if (!snap.exists()) {
-      setCloudStatus(`Cloud: ready • doc will be created (${batchCode})`);
-      // Create doc from local
+      setCloudStatus("Cloud: ready • creating doc…");
       scheduleCloudSave(true);
       return;
     }
@@ -259,13 +231,12 @@ function joinCloudRoom(dept, type) {
       suppressNextCloudWrite = true;
       saveLocal(dept, type, cloud);
       renderChecklist(dept, type);
-      setCloudStatus(`Cloud: synced • ${batchCode}`);
+      setCloudStatus("Cloud: synced ✅");
     } else {
-      setCloudStatus(`Cloud: listening • ${batchCode}`);
+      setCloudStatus("Cloud: listening");
     }
   });
 
-  // Also ensure doc exists soon
   scheduleCloudSave(true);
 }
 
@@ -286,10 +257,8 @@ function scheduleCloudSave(immediate = false) {
       const type = cartTypeSelect?.value || "";
       if (!dept || !type) return;
 
-      const batchCode = getBatchCode(dept);
       const state = loadLocal(dept, type) || defaultState();
 
-      // add server timestamp
       const payload = {
         ...state,
         meta: {
@@ -298,18 +267,74 @@ function scheduleCloudSave(immediate = false) {
         }
       };
 
-      setCloudStatus(`Cloud: saving… (${batchCode})`);
+      setCloudStatus("Cloud: saving…");
       await setDoc(currentDocRef, payload, { merge: true });
-      setCloudStatus(`Cloud: saved ✅ (${batchCode})`);
+      setCloudStatus("Cloud: saved ✅");
     } catch (e) {
       setCloudStatus("Cloud: save failed (local ok)");
-      // keep UI clean; don’t spam
       console.warn("Cloud save error:", e);
     }
   }, delay);
 }
 
-// -------------------- UI Rendering --------------------
+/* -------------------- Live Sticker Preview -------------------- */
+let activeRowId = null;
+let activeRowLabel = "";
+
+function renderStickerPreview(dept, type, label, row) {
+  if (!stickerPreview) return;
+
+  const val = (x) => (x && String(x).trim() ? String(x) : "—");
+  const miss = (x) => (x && String(x).trim() ? "" : " miss");
+
+  stickerPreview.innerHTML = `
+    <div class="st-top">
+      <div>
+        <div class="st-title">Live Sticker Preview</div>
+        <div class="st-sub">${dept} • ${String(type).toUpperCase()} • ${label}</div>
+      </div>
+      <div class="badge">Editing</div>
+    </div>
+
+    <div class="st-grid">
+      <div class="st-item">
+        <div class="st-label">Cart #</div>
+        <div class="st-val${miss(row.cart)}">${val(row.cart)}</div>
+      </div>
+
+      <div class="st-item">
+        <div class="st-label">Checked By</div>
+        <div class="st-val${miss(row.checked)}">${val(row.checked)}</div>
+      </div>
+
+      <div class="st-item">
+        <div class="st-label">Central Exp</div>
+        <div class="st-val${miss(row.central)}">${val(row.central)}</div>
+      </div>
+
+      <div class="st-item">
+        <div class="st-label">Med Box Exp</div>
+        <div class="st-val${miss(row.medbox)}">${val(row.medbox)}</div>
+      </div>
+
+      <div class="st-item" style="grid-column: 1 / -1;">
+        <div class="st-label">Notes</div>
+        <div class="st-val${miss(row.notes)}">${val(row.notes)}</div>
+      </div>
+    </div>
+  `;
+
+  stickerPreview.classList.remove("hidden");
+}
+
+function updateStickerFromState(dept, type) {
+  if (!activeRowId || !stickerPreview) return;
+  const state = loadLocal(dept, type) || defaultState();
+  const row = (state.rows && state.rows[activeRowId]) ? state.rows[activeRowId] : {};
+  renderStickerPreview(dept, type, activeRowLabel, row);
+}
+
+/* -------------------- UI Rendering -------------------- */
 function renderChecklist(dept, type) {
   const def = CART_DEFS[type];
   if (!def) return;
@@ -350,7 +375,7 @@ function renderChecklist(dept, type) {
       const row = state.rows[rowId] || {};
 
       bodyHTML += `
-        <tr data-rowid="${rowId}">
+        <tr data-rowid="${rowId}" data-label="${label}">
           <td class="cell-label">${label}</td>
           <td><input class="cell" data-field="cart" placeholder="#" value="${row.cart || ""}"></td>
           <td><input class="cell" data-field="central" placeholder="MM-DD-YY" value="${row.central || ""}"></td>
@@ -375,12 +400,25 @@ function renderChecklist(dept, type) {
   `;
 
   attachAutosave(dept, type);
+
+  // If a row was active before re-render, refresh sticker
+  updateStickerFromState(dept, type);
 }
 
 function attachAutosave(dept, type) {
   const table = checklistContainer.querySelector("table");
   if (!table) return;
 
+  // When user taps into any field, set that row as active for sticker preview
+  table.addEventListener("focusin", (e) => {
+    const tr = e.target.closest("tr[data-rowid]");
+    if (!tr) return;
+    activeRowId = tr.getAttribute("data-rowid");
+    activeRowLabel = tr.getAttribute("data-label") || "";
+    updateStickerFromState(dept, type);
+  });
+
+  // Live input -> save local + cloud + update sticker
   table.addEventListener("input", (e) => {
     const input = e.target;
     if (!(input instanceof HTMLInputElement)) return;
@@ -400,11 +438,12 @@ function attachAutosave(dept, type) {
     touchMeta(state, dept, type);
     saveLocal(dept, type, state);
 
+    updateStickerFromState(dept, type);
     scheduleCloudSave(false);
   });
 }
 
-// -------------------- CSV Export --------------------
+/* -------------------- CSV Export -------------------- */
 function exportCSV(dept, type) {
   const def = CART_DEFS[type];
   const state = loadLocal(dept, type) || defaultState();
@@ -448,36 +487,33 @@ function exportCSV(dept, type) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// -------------------- Wiring --------------------
-function hideControls() {
+/* -------------------- Wiring -------------------- */
+function resetUI() {
   cartTypeSelect.classList.add("hidden");
   btnClear.classList.add("hidden");
   btnExport.classList.add("hidden");
   checklistContainer.innerHTML = "";
   setStatus("Select a Department, then choose Cart Type.");
   setCloudStatus("Cloud: —");
-}
-
-function showControls() {
-  cartTypeSelect.classList.remove("hidden");
+  if (stickerPreview) stickerPreview.classList.add("hidden");
+  activeRowId = null;
+  activeRowLabel = "";
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   connectFirestore();
-
-  // Initial UI state
-  hideControls();
+  resetUI();
 
   departmentSelect.addEventListener("change", () => {
     const dept = departmentSelect.value;
 
     if (!dept) {
       cartTypeSelect.value = "";
-      hideControls();
+      resetUI();
       return;
     }
 
-    showControls();
+    cartTypeSelect.classList.remove("hidden");
     setStatus(`Department: ${dept} — choose Cart Type.`);
   });
 
@@ -490,10 +526,7 @@ document.addEventListener("DOMContentLoaded", () => {
     btnClear.classList.remove("hidden");
     btnExport.classList.remove("hidden");
 
-    // Render from local immediately
     renderChecklist(dept, type);
-
-    // Join cloud room for this (dept + type)
     joinCloudRoom(dept, type);
   });
 
@@ -508,6 +541,10 @@ document.addEventListener("DOMContentLoaded", () => {
     localStorage.removeItem(storageKey(dept, type));
     renderChecklist(dept, type);
     scheduleCloudSave(false);
+
+    if (stickerPreview) stickerPreview.classList.add("hidden");
+    activeRowId = null;
+    activeRowLabel = "";
   });
 
   btnExport.addEventListener("click", () => {
@@ -516,18 +553,4 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!dept || !type) return;
     exportCSV(dept, type);
   });
-
-  // Optional “Join” button support (if you add batchCode + btnJoin later)
-  if (btnJoinEl) {
-    btnJoinEl.addEventListener("click", () => {
-      const dept = departmentSelect.value;
-      const type = cartTypeSelect.value;
-      if (!dept || !type) return;
-
-      const code = batchCodeEl ? batchCodeEl.value : "";
-      if (code) setBatchCode(code);
-
-      joinCloudRoom(dept, type);
-    });
-  }
 });
