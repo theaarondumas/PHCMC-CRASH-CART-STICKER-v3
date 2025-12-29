@@ -67,14 +67,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ---------- Firebase CONFIG ----------
   // Paste your real Firebase config here:
-  const firebaseConfig = {
-    apiKey: "PASTE_ME",
-    authDomain: "PASTE_ME",
-    projectId: "PASTE_ME",
-    storageBucket: "PASTE_ME",
-    messagingSenderId: "PASTE_ME",
-    appId: "PASTE_ME"
-  };
+ const firebaseConfig = {
+  apiKey: "AIzaSyB-3bjNKIf-00cRu3HtxdsjnM",
+  authDomain: "phcmc-crash-cart.firebaseapp.com",
+  projectId: "phcmc-crash-cart",
+  storageBucket: "phcmc-crash-cart.appspot.com",
+  messagingSenderId: "478233106614",
+  appId: "1:478233106614:web:441f55c8f401"
+};
 
   const firebaseReady = Object.values(firebaseConfig).every(
     v => typeof v === "string" && v !== "PASTE_ME"
