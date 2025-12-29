@@ -1,11 +1,10 @@
 /* =========================================================
    UnitFlow — Department + Cart Type Checklists (PHC Style)
-   ✅ Department dropdown + Cart Type dropdown
-   ✅ Dynamic checklist table (Adult / Neonatal / Broselow)
    ✅ PHC label-style live sticker preview (Green + Orange)
+   ✅ Save indicator pill (Saving… / Saved ✅ / Save failed)
    ✅ Local autosave
    ✅ CSV export
-   ✅ Firestore realtime sync + offline persistence (IndexedDB)
+   ✅ Firestore realtime sync + offline persistence
    ✅ Conflict handling + throttled writes
 ========================================================= */
 
@@ -43,6 +42,7 @@ const btnClear = document.getElementById("btnClear");
 const btnExport = document.getElementById("btnExport");
 const stickerPreview = document.getElementById("stickerPreview");
 const cloudStatusEl = document.getElementById("cloudStatus");
+const saveIndicator = document.getElementById("saveIndicator");
 
 /* -------------------- PHC constants -------------------- */
 const PHC_FACILITY = "Providence Holy Cross Hospital";
@@ -60,6 +60,27 @@ function setStatus(msg) {
 }
 function setCloudStatus(msg) {
   if (cloudStatusEl) cloudStatusEl.textContent = msg;
+}
+
+function setSavedState(mode) {
+  if (!saveIndicator) return;
+  saveIndicator.classList.remove("saving", "error");
+
+  if (mode === "saving") {
+    saveIndicator.textContent = "Saving…";
+    saveIndicator.classList.add("saving");
+  } else if (mode === "saved") {
+    saveIndicator.textContent = "Saved ✅";
+  } else if (mode === "error") {
+    saveIndicator.textContent = "Save failed";
+    saveIndicator.classList.add("error");
+  }
+}
+
+function showSaveIndicator(show) {
+  if (!saveIndicator) return;
+  if (show) saveIndicator.classList.remove("hidden");
+  else saveIndicator.classList.add("hidden");
 }
 
 function todayISO() {
@@ -97,9 +118,7 @@ function escapeCSV(val) {
   return s;
 }
 
-/* -------------------- Cart Definitions --------------------
-   Edit sections/rows to match your real sheets 1:1
----------------------------------------------------------- */
+/* -------------------- Cart Definitions -------------------- */
 const CART_DEFS = {
   adult: {
     title: "Adult Crash Cart",
@@ -141,7 +160,7 @@ const CART_DEFS = {
 /* -------------------- State -------------------- */
 function defaultState() {
   return {
-    rows: {}, // keyed by rowId
+    rows: {},
     meta: {
       updatedAtLocal: Date.now(),
       updatedByDevice: getDeviceId(),
@@ -190,7 +209,6 @@ function defaultBatchCode(dept) {
 }
 
 function cloudDocId(dept, type) {
-  // One doc per dept + cart type per day (simple & clean)
   const base = defaultBatchCode(dept);
   return `${base}__${deptSlug(dept)}__${String(type).toUpperCase()}`;
 }
@@ -237,12 +255,12 @@ function joinCloudRoom(dept, type) {
       saveLocal(dept, type, cloud);
       renderChecklist(dept, type);
       setCloudStatus("Cloud: synced ✅");
+      setSavedState("saved");
     } else {
       setCloudStatus("Cloud: listening");
     }
   });
 
-  // ensure doc exists
   scheduleCloudSave(true);
 }
 
@@ -273,11 +291,14 @@ function scheduleCloudSave(immediate = false) {
         }
       };
 
+      setSavedState("saving");
       setCloudStatus("Cloud: saving…");
       await setDoc(currentDocRef, payload, { merge: true });
       setCloudStatus("Cloud: saved ✅");
+      setSavedState("saved");
     } catch (e) {
       setCloudStatus("Cloud: save failed (local ok)");
+      setSavedState("error");
       console.warn("Cloud save error:", e);
     }
   }, delay);
@@ -302,7 +323,6 @@ function renderStickerPreview(dept, type, label, row) {
 
   stickerPreview.innerHTML = `
     <div class="phcWrap">
-
       <div class="phcSticker phcGreen">
         <div class="phcHeader">
           <div class="phcFacility">${PHC_FACILITY}</div>
@@ -317,17 +337,14 @@ function renderStickerPreview(dept, type, label, row) {
             <span>Location:</span>
             <span class="phcFill">${val(location)}</span>
           </div>
-
           <div class="phcRow">
             <span>Cart #:</span>
             <span class="phcFill${miss(cartNum)}">${val(cartNum)}</span>
           </div>
-
           <div class="phcRow">
             <span>Central Exp:</span>
             <span class="phcFill${miss(central)}">${val(central)}</span>
           </div>
-
           <div class="phcRow">
             <span>Med Box Exp:</span>
             <span class="phcFill${miss(medbox)}">${val(medbox)}</span>
@@ -343,19 +360,16 @@ function renderStickerPreview(dept, type, label, row) {
             <span>Checked By:</span>
             <span class="phcFill${miss(checkedBy)}">${val(checkedBy)}</span>
           </div>
-
           <div class="phcRow">
             <span>Notes:</span>
             <span class="phcFill${miss(notes)}">${val(notes)}</span>
           </div>
-
           <div class="phcRow">
             <span>Type:</span>
             <span class="phcFill">${String(type).toUpperCase()}</span>
           </div>
         </div>
       </div>
-
     </div>
   `;
 
@@ -442,7 +456,6 @@ function attachAutosave(dept, type) {
   const table = checklistContainer.querySelector("table");
   if (!table) return;
 
-  // Focus row -> show PHC sticker preview
   table.addEventListener("focusin", (e) => {
     const tr = e.target.closest("tr[data-rowid]");
     if (!tr) return;
@@ -451,7 +464,6 @@ function attachAutosave(dept, type) {
     updateStickerFromState(dept, type);
   });
 
-  // Input -> save local + cloud + update sticker
   table.addEventListener("input", (e) => {
     const input = e.target;
     if (!(input instanceof HTMLInputElement)) return;
@@ -469,7 +481,10 @@ function attachAutosave(dept, type) {
     state.rows[rowId][field] = input.value;
 
     touchMeta(state, dept, type);
+
+    setSavedState("saving");
     saveLocal(dept, type, state);
+    setSavedState("saved");
 
     updateStickerFromState(dept, type);
     scheduleCloudSave(false);
@@ -532,6 +547,7 @@ function resetUI() {
   if (stickerPreview) stickerPreview.classList.add("hidden");
   activeRowId = null;
   activeRowLabel = "";
+  showSaveIndicator(false);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -559,6 +575,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     btnClear.classList.remove("hidden");
     btnExport.classList.remove("hidden");
+    showSaveIndicator(true);
+    setSavedState("saved");
 
     renderChecklist(dept, type);
     joinCloudRoom(dept, type);
@@ -573,8 +591,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!ok) return;
 
     localStorage.removeItem(storageKey(dept, type));
+    setSavedState("saving");
     renderChecklist(dept, type);
     scheduleCloudSave(false);
+    setSavedState("saved");
 
     if (stickerPreview) stickerPreview.classList.add("hidden");
     activeRowId = null;
