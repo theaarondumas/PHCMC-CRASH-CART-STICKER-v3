@@ -1,3 +1,12 @@
+/* =========================================================
+   UnitFlow — Department + Cart Type Checklists
+   ✅ Local autosave
+   ✅ CSV export
+   ✅ Firestore realtime sync (optional)
+   ✅ Offline persistence (IndexedDB)
+   ✅ Conflict handling (cloud vs local)
+========================================================= */
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
 import {
   getFirestore,
@@ -8,66 +17,9 @@ import {
   enableIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-const LOCAL_KEY = "cc_clean_batch_option3_dept_v1";
-const LOCAL_CODE_KEY = "cc_batch_code_dept_v1";
-
-document.addEventListener("DOMContentLoaded", () => {
-  const $ = (id) => document.getElementById(id);
-
-  const els = {
-    // topbar dept dropdown
-    deptSelect: $("deptSelect"),
-
-    // batch code UI
-    batchCode: $("batchCode"),
-    btnJoin: $("btnJoin"),
-    btnCopyCode: $("btnCopyCode"),
-    btnRotateCode: $("btnRotateCode"),
-    cloudStatus: $("cloudStatus"),
-    footerBatch: $("footerBatch"),
-    debug: $("debug"),
-
-    // batch UI
-    batchList: $("batchList"),
-    btnPrintAll: $("btnPrintAll"),
-    btnClear: $("btnClear"),
-    btnSubmitCart: $("btnSubmitCart"),
-    btnUnsubmitCart: $("btnUnsubmitCart"),
-
-    // inputs
-    firstSupply: $("firstSupply"),
-    cartNumber: $("cartNumber"),
-    date: $("date"),
-    checkDone: $("checkDone"),
-    tech: $("tech"),
-
-    firstDrugExp: $("firstDrugExp"),
-    drugName: $("drugName"),
-    lockNumber: $("lockNumber"),
-    drugCheckDone: $("drugCheckDone"),
-    initials: $("initials"),
-    cartId: $("cartId"),
-
-    // sticker fields
-    sFacility: $("sFacility"),
-    sDept: $("sDept"),
-    sPhone: $("sPhone"),
-    sFirstSupply: $("sFirstSupply"),
-    sCartNum: $("sCartNum"),
-    sDate: $("sDate"),
-    sCheckDone: $("sCheckDone"),
-    sTech: $("sTech"),
-
-    sFirstDrug: $("sFirstDrug"),
-    sDrugName: $("sDrugName"),
-    sLock: $("sLock"),
-    sDrugCheckDone: $("sDrugCheckDone"),
-    sInitials: $("sInitials"),
-  };
-
-  // ---------- Firebase CONFIG ----------
-  // Paste your real Firebase config here:
- const firebaseConfig = {
+// -------------------- Firebase Config --------------------
+// Use YOUR real config (apiKey etc. is OK for client apps; rules must protect data)
+const firebaseConfig = {
   apiKey: "AIzaSyB-3bjNKIf-00cRu3HtxdsjnM",
   authDomain: "phcmc-crash-cart.firebaseapp.com",
   projectId: "phcmc-crash-cart",
@@ -76,523 +28,506 @@ document.addEventListener("DOMContentLoaded", () => {
   appId: "1:478233106614:web:441f55c8f401"
 };
 
-  const firebaseReady = Object.values(firebaseConfig).every(
-    v => typeof v === "string" && v !== "PASTE_ME"
-  );
+const firebaseReady =
+  firebaseConfig &&
+  typeof firebaseConfig.projectId === "string" &&
+  firebaseConfig.projectId.length > 0;
 
-  // ---------- Helpers ----------
-  const todayISO = () => {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  };
+// -------------------- DOM --------------------
+const departmentSelect = document.getElementById("departmentSelect");
+const cartTypeSelect = document.getElementById("cartTypeSelect");
+const checklistContainer = document.getElementById("checklistContainer");
+const statusLine = document.getElementById("statusLine");
+const btnClear = document.getElementById("btnClear");
+const btnExport = document.getElementById("btnExport");
 
-  const prettyDate = (yyyyMmDd) => {
-    const [y, m, d] = yyyyMmDd.split("-").map(Number);
-    const dt = new Date(y, m - 1, d);
-    return dt.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" });
-  };
+// Optional elements (only used if you add them later)
+const batchCodeEl = document.getElementById("batchCode");     // optional input
+const btnJoinEl   = document.getElementById("btnJoin");       // optional button
+const cloudStatusEl = document.getElementById("cloudStatus"); // optional label/span
 
-  const escapeHtml = (str) => String(str ?? "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
+// -------------------- Local Keys --------------------
+function storageKey(dept, type) {
+  return `unitflow_checklist_${dept || "NONE"}_${type || "NONE"}`;
+}
+const DEVICE_KEY = "unitflow_device_id";
+const CLOUD_CODE_KEY = "unitflow_cloud_code_v1";
 
-  const normalizeCode = (code) =>
-    String(code || "").trim().replace(/\s+/g, "-").toUpperCase();
+// -------------------- Helpers --------------------
+function setStatus(msg) {
+  if (statusLine) statusLine.textContent = msg;
+}
+function setCloudStatus(msg) {
+  if (cloudStatusEl) cloudStatusEl.textContent = msg;
+}
 
-  const deptSlug = (name) => {
-    return String(name || "")
-      .toUpperCase()
-      .replaceAll("&", "AND")
-      .replace(/[^A-Z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-  };
+function todayISO() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+function yyyymmdd() {
+  return todayISO().replaceAll("-", "");
+}
+function normalizeCode(code) {
+  return String(code || "").trim().replace(/\s+/g, "-").toUpperCase();
+}
+function deptSlug(name) {
+  return String(name || "")
+    .toUpperCase()
+    .replaceAll("&", "AND")
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
-  function getDeviceId() {
-    const key = "cc_device_id";
-    const existing = localStorage.getItem(key);
-    if (existing) return existing;
-    const id = "dev_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
-    localStorage.setItem(key, id);
-    return id;
+function getDeviceId() {
+  const existing = localStorage.getItem(DEVICE_KEY);
+  if (existing) return existing;
+  const id = "dev_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
+  localStorage.setItem(DEVICE_KEY, id);
+  return id;
+}
+
+function escapeCSV(val) {
+  const s = String(val ?? "");
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+// -------------------- Cart Definitions (edit anytime) --------------------
+const CART_DEFS = {
+  adult: {
+    title: "Adult Crash Cart",
+    columns: ["Area", "Cart #", "Central Exp", "Med Box Exp", "Checked By", "Notes"],
+    sections: [
+      { name: "ER Area", rows: ["Cardiology", "EDX1", "EDX2", "ER Triage", "ER Rm 2"] },
+      { name: "X-Ray Dept", rows: ["CT1", "CT2/MRI", "X-Ray", "Specials Rm 5", "Specials Rm 6", "Cath Lab", "CT Trailer"] },
+      { name: "Mother/Baby", rows: ["L/D Triage", "L/D nurse stn", "Maternity"] },
+      { name: "Surgery", rows: ["OR", "Recovery"] },
+      { name: "North Building", rows: ["Physical therapy"] },
+      { name: "Basement", rows: ["GI Lab"] },
+      { name: "Central Backup Carts", rows: ["Backup #1", "Backup #2", "Backup #3", "Backup #4"] }
+    ]
+  },
+  neonatal: {
+    title: "Neonatal Crash Cart",
+    columns: ["Location", "Cart #", "Central Exp", "Med Box Exp", "Checked By", "Notes"],
+    sections: [
+      { name: "Labor and Delivery", rows: ["OR Hallway", "L/D Hallway"] },
+      { name: "Mother/Baby", rows: ["NICU", "Nursery", "Maternity", "PAV C NICU"] },
+      { name: "2nd Floor", rows: ["2A", "Overflow"] },
+      { name: "Central Backup Carts", rows: ["Backup #1", "Backup #2", "Backup #3", "Backup #4", "Backup #5"] }
+    ]
+  },
+  broselow: {
+    title: "Broselow Cart",
+    columns: ["Area", "Cart #", "Central Exp", "Med Box Exp", "Checked By", "Notes"],
+    sections: [
+      { name: "2nd Floor", rows: ["2C", "ER", "EDX1", "EDX2", "ER Main"] },
+      { name: "Surgery", rows: ["Recovery"] },
+      { name: "North Bldg", rows: ["Physical Therapy"] },
+      { name: "Central Backup Carts", rows: ["Backup #3", "Backup #6"] }
+    ]
   }
+};
 
-  // ---------- State ----------
-  const blankCart = (id) => ({
-    id,
-    status: "Draft",
-    completedAt: null,
-
-    // CLEARED by default
-    firstSupply: "",
-    cartNumber: "",
-    drugName: "",
-    initials: "",
-
-    // keep defaults
-    date: todayISO(),
-    checkDone: todayISO(),
-    tech: "",
-
-    firstDrugExp: "",
-    lockNumber: "",
-    drugCheckDone: "",
-  });
-
-  const defaultState = () => ({
-    header: {
-      facility: "Providence Holy Cross Hospital",
-      dept: "Central Department",
-      phone: "818-496-1190",
-    },
-    active: "CC-01",
-    carts: {
-      "CC-01": blankCart("CC-01"),
-      "CC-02": blankCart("CC-02"),
-      "CC-03": blankCart("CC-03"),
-      "CC-04": blankCart("CC-04"),
-    },
+// -------------------- State --------------------
+function defaultState() {
+  return {
+    rows: {}, // keyed by rowId
     meta: {
       updatedAtLocal: Date.now(),
       updatedByDevice: getDeviceId(),
+      dept: "",
+      cartType: ""
     }
-  });
-
-  let state = loadLocal() || defaultState();
-
-  // ---------- Firestore ----------
-  let db = null;
-  let unsubscribe = null;
-  let currentDocRef = null;
-  let suppressNextCloudWrite = false;
-  let saveTimer = null;
-
-  if (firebaseReady) {
-    const app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
-    enableIndexedDbPersistence(db).catch(() => {});
-  }
-
-  // ---------- Department dropdown init ----------
-  if (els.deptSelect) {
-    els.deptSelect.value = state.header.dept || "Central Department";
-  }
-
-  // default batch code includes department + date
-  const defaultCode = () => {
-    const dept = state?.header?.dept || "Central Department";
-    return `PHC-${todayISO().replaceAll("-","")}-${deptSlug(dept)}-DAY`;
   };
+}
 
-  els.batchCode.value = localStorage.getItem(LOCAL_CODE_KEY) || defaultCode();
-  updateFooter();
+function loadLocal(dept, type) {
+  try {
+    const raw = localStorage.getItem(storageKey(dept, type));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
-  // ---------- Department change behavior ----------
-  els.deptSelect.addEventListener("change", () => {
-    const newDept = els.deptSelect.value;
+function saveLocal(dept, type, state) {
+  try {
+    localStorage.setItem(storageKey(dept, type), JSON.stringify(state));
+  } catch {
+    // ignore
+  }
+}
 
-    // update header + sticker
-    state.header.dept = newDept;
+function touchMeta(state, dept, type) {
+  state.meta = state.meta || {};
+  state.meta.updatedAtLocal = Date.now();
+  state.meta.updatedByDevice = getDeviceId();
+  state.meta.dept = dept;
+  state.meta.cartType = type;
+}
 
-    // set batch code to match dept + date
-    const base = `PHC-${todayISO().replaceAll("-","")}-${deptSlug(newDept)}-DAY`;
-    els.batchCode.value = base;
-    localStorage.setItem(LOCAL_CODE_KEY, base);
-    updateFooter();
+// -------------------- Firestore Sync --------------------
+let db = null;
+let currentDocRef = null;
+let unsubscribe = null;
+let suppressNextCloudWrite = false;
+let saveTimer = null;
 
-    touchMeta();
-    saveLocal();
-    renderAll();
+function buildDefaultBatchCode(dept) {
+  // Auto code: UF-YYYYMMDD-DEPT-DAY
+  return `UF-${yyyymmdd()}-${deptSlug(dept || "DEPT")}-DAY`;
+}
 
-    // join/sync the new room
-    joinBatch(base);
+function getBatchCode(dept) {
+  // Priority:
+  // 1) UI input if present
+  // 2) stored last code
+  // 3) auto generated
+  const ui = batchCodeEl ? normalizeCode(batchCodeEl.value) : "";
+  if (ui) return ui;
+
+  const saved = localStorage.getItem(CLOUD_CODE_KEY);
+  if (saved) return normalizeCode(saved);
+
+  const auto = buildDefaultBatchCode(dept);
+  return normalizeCode(auto);
+}
+
+function setBatchCode(code) {
+  const norm = normalizeCode(code);
+  localStorage.setItem(CLOUD_CODE_KEY, norm);
+  if (batchCodeEl) batchCodeEl.value = norm;
+}
+
+function cloudDocId(batchCode, dept, type) {
+  // One document per (batch + department + cart type)
+  // Keeps data separated cleanly
+  return `${normalizeCode(batchCode)}__${deptSlug(dept)}__${String(type).toUpperCase()}`;
+}
+
+function connectFirestore() {
+  if (!firebaseReady) return;
+
+  const app = initializeApp(firebaseConfig);
+  db = getFirestore(app);
+
+  // Offline cache (good for hospital wifi)
+  enableIndexedDbPersistence(db).catch(() => {});
+}
+
+function joinCloudRoom(dept, type) {
+  if (!db) {
+    setCloudStatus("Cloud: OFF");
+    return;
+  }
+
+  const batchCode = getBatchCode(dept);
+  setBatchCode(batchCode);
+
+  // Cleanly switch listeners
+  if (unsubscribe) {
+    unsubscribe();
+    unsubscribe = null;
+  }
+
+  const id = cloudDocId(batchCode, dept, type);
+  currentDocRef = doc(db, "unitflowChecklists", id);
+  setCloudStatus(`Cloud: connecting… (${batchCode})`);
+
+  unsubscribe = onSnapshot(currentDocRef, (snap) => {
+    if (!snap.exists()) {
+      setCloudStatus(`Cloud: ready • doc will be created (${batchCode})`);
+      // Create doc from local
+      scheduleCloudSave(true);
+      return;
+    }
+
+    const cloud = snap.data();
+    const cloudUpdated = cloud?.meta?.updatedAtLocal || 0;
+
+    const localState = loadLocal(dept, type) || defaultState();
+    const localUpdated = localState?.meta?.updatedAtLocal || 0;
+
+    if (cloudUpdated > localUpdated) {
+      suppressNextCloudWrite = true;
+      saveLocal(dept, type, cloud);
+      renderChecklist(dept, type);
+      setCloudStatus(`Cloud: synced • ${batchCode}`);
+    } else {
+      setCloudStatus(`Cloud: listening • ${batchCode}`);
+    }
   });
 
-  // ---------- Batch code actions ----------
-  els.btnJoin.addEventListener("click", () => joinBatch(els.batchCode.value));
+  // Also ensure doc exists soon
+  scheduleCloudSave(true);
+}
 
-  els.btnCopyCode.addEventListener("click", async () => {
+function scheduleCloudSave(immediate = false) {
+  if (!db || !currentDocRef) return;
+
+  if (suppressNextCloudWrite) {
+    suppressNextCloudWrite = false;
+    return;
+  }
+
+  if (saveTimer) clearTimeout(saveTimer);
+  const delay = immediate ? 0 : 450;
+
+  saveTimer = setTimeout(async () => {
     try {
-      await navigator.clipboard.writeText(normalizeCode(els.batchCode.value));
-      els.cloudStatus.textContent = "Batch Code copied ✅";
-    } catch {
-      els.cloudStatus.textContent = "Copy blocked — select + copy manually.";
-    }
-  });
+      const dept = departmentSelect?.value || "";
+      const type = cartTypeSelect?.value || "";
+      if (!dept || !type) return;
 
-  els.btnRotateCode.addEventListener("click", () => {
-    const rotated = rotateCode();
-    els.batchCode.value = rotated;
-    joinBatch(rotated);
-  });
+      const batchCode = getBatchCode(dept);
+      const state = loadLocal(dept, type) || defaultState();
 
-  // auto-join on load
-  joinBatch(els.batchCode.value);
-
-  // ---------- Bind UI ----------
-  bindLiveInputs();
-  bindButtons();
-  renderAll();
-  els.debug.textContent = "App running ✅";
-
-  function rotateCode() {
-    const dept = state?.header?.dept || "Central Department";
-    const rand = Math.random().toString(16).slice(2, 6).toUpperCase();
-    return `PHC-${todayISO().replaceAll("-","")}-${deptSlug(dept)}-DAY-${rand}`;
-  }
-
-  function updateFooter() {
-    els.footerBatch.textContent = `Batch Code: ${normalizeCode(els.batchCode.value) || "—"}`;
-  }
-
-  function touchMeta() {
-    state.meta = state.meta || {};
-    state.meta.updatedAtLocal = Date.now();
-    state.meta.updatedByDevice = getDeviceId();
-  }
-
-  function joinBatch(rawCode) {
-    const code = normalizeCode(rawCode);
-    if (!code) {
-      els.cloudStatus.textContent = "Enter a Batch Code.";
-      return;
-    }
-
-    localStorage.setItem(LOCAL_CODE_KEY, code);
-    els.batchCode.value = code;
-    updateFooter();
-
-    if (!firebaseReady || !db) {
-      els.cloudStatus.textContent = "Cloud: OFF (paste Firebase config in app.js)";
-      return;
-    }
-
-    if (unsubscribe) {
-      unsubscribe();
-      unsubscribe = null;
-    }
-
-    currentDocRef = doc(db, "crashCartBatches", code);
-    els.cloudStatus.textContent = `Cloud: connecting… (${code})`;
-
-    unsubscribe = onSnapshot(currentDocRef, (snap) => {
-      if (!snap.exists()) {
-        els.cloudStatus.textContent = `Cloud: ready • doc will be created (${code})`;
-        return;
-      }
-
-      const cloud = snap.data();
-      const cloudUpdated = cloud?.meta?.updatedAtLocal || 0;
-      const localUpdated = state?.meta?.updatedAtLocal || 0;
-
-      if (cloudUpdated > localUpdated) {
-        suppressNextCloudWrite = true;
-        state = cloud;
-
-        // keep dept dropdown in sync with cloud
-        if (els.deptSelect && state?.header?.dept) {
-          els.deptSelect.value = state.header.dept;
+      // add server timestamp
+      const payload = {
+        ...state,
+        meta: {
+          ...(state.meta || {}),
+          updatedAtServer: serverTimestamp()
         }
+      };
 
-        saveLocal();
-        renderAll();
-        els.cloudStatus.textContent = `Cloud: synced • ${code}`;
-      } else {
-        els.cloudStatus.textContent = `Cloud: listening • ${code}`;
-      }
-    });
-
-    // create doc if needed
-    scheduleCloudSave(true);
-  }
-
-  function scheduleCloudSave(immediate = false) {
-    if (!firebaseReady || !currentDocRef) return;
-
-    if (suppressNextCloudWrite) {
-      suppressNextCloudWrite = false;
-      return;
+      setCloudStatus(`Cloud: saving… (${batchCode})`);
+      await setDoc(currentDocRef, payload, { merge: true });
+      setCloudStatus(`Cloud: saved ✅ (${batchCode})`);
+    } catch (e) {
+      setCloudStatus("Cloud: save failed (local ok)");
+      // keep UI clean; don’t spam
+      console.warn("Cloud save error:", e);
     }
+  }, delay);
+}
 
-    if (saveTimer) clearTimeout(saveTimer);
-    const delay = immediate ? 0 : 450;
+// -------------------- UI Rendering --------------------
+function renderChecklist(dept, type) {
+  const def = CART_DEFS[type];
+  if (!def) return;
 
-    saveTimer = setTimeout(async () => {
-      try {
-        els.cloudStatus.textContent = `Cloud: saving… (${normalizeCode(els.batchCode.value)})`;
-        const payload = {
-          ...state,
-          meta: {
-            ...state.meta,
-            updatedAtServer: serverTimestamp(),
-          }
-        };
-        await setDoc(currentDocRef, payload, { merge: true });
-        els.cloudStatus.textContent = `Cloud: saved ✅ (${normalizeCode(els.batchCode.value)})`;
-      } catch (e) {
-        els.cloudStatus.textContent = "Cloud: save failed (local ok)";
-        els.debug.textContent = `Cloud save error: ${String(e)}`;
-      }
-    }, delay);
-  }
+  const state = loadLocal(dept, type) || (() => {
+    const s = defaultState();
+    touchMeta(s, dept, type);
+    saveLocal(dept, type, s);
+    return s;
+  })();
 
-  // ---------- Live inputs ----------
-  function bindLiveInputs() {
-    const map = [
-      ["firstSupply", "firstSupply"],
-      ["cartNumber", "cartNumber"],
-      ["date", "date"],
-      ["checkDone", "checkDone"],
-      ["tech", "tech"],
-      ["firstDrugExp", "firstDrugExp"],
-      ["drugName", "drugName"],
-      ["lockNumber", "lockNumber"],
-      ["drugCheckDone", "drugCheckDone"],
-      ["initials", "initials"],
-    ];
+  setStatus(`Department: ${dept} — ${def.title}`);
 
-    map.forEach(([elKey, stateKey]) => {
-      els[elKey].addEventListener("input", (e) => {
-        const c = getActive();
-        c[stateKey] = e.target.value;
+  const head = `
+    <div class="hrow">
+      <div class="title">${def.title}</div>
+      <div class="badge">${dept} • ${String(type).toUpperCase()}</div>
+    </div>
+  `;
 
-        if (c.status === "Completed") {
-          c.status = "Draft";
-          c.completedAt = null;
-        }
+  const tableHead = `
+    <thead>
+      <tr>${def.columns.map(c => `<th>${c}</th>`).join("")}</tr>
+    </thead>
+  `;
 
-        touchMeta();
-        saveLocal();
-        renderAll();
-        scheduleCloudSave(false);
-      });
-    });
-  }
+  let bodyHTML = `<tbody>`;
 
-  // ---------- Buttons ----------
-  function bindButtons() {
-    els.btnSubmitCart.addEventListener("click", () => {
-      const c = getActive();
-      c.status = "Completed";
-      c.completedAt = new Date().toISOString();
-      touchMeta();
-      saveLocal();
-      renderAll();
-      scheduleCloudSave(false);
-    });
-
-    els.btnUnsubmitCart.addEventListener("click", () => {
-      const c = getActive();
-      c.status = "Draft";
-      c.completedAt = null;
-      touchMeta();
-      saveLocal();
-      renderAll();
-      scheduleCloudSave(false);
-    });
-
-    els.btnClear.addEventListener("click", () => {
-      if (!confirm("Clear ALL saved data (local + this batch doc)?")) return;
-      state = defaultState();
-
-      // keep dept dropdown value in sync with reset
-      if (els.deptSelect) els.deptSelect.value = state.header.dept;
-
-      // reset batch code to dept/date default
-      const base = defaultCode();
-      els.batchCode.value = base;
-      localStorage.setItem(LOCAL_CODE_KEY, base);
-      updateFooter();
-
-      touchMeta();
-      saveLocal();
-      renderAll();
-      joinBatch(base);
-    });
-
-    els.btnPrintAll.addEventListener("click", () => openPrintAll());
-  }
-
-  // ---------- Rendering ----------
-  function renderAll() {
-    renderBatch();
-    loadCartToForm(getActive());
-    renderSticker(getActive());
-  }
-
-  function renderBatch() {
-    els.batchList.innerHTML = "";
-    ["CC-01","CC-02","CC-03","CC-04"].forEach((id) => {
-      const c = state.carts[id];
-
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "batchBtn" + (state.active === id ? " active" : "");
-
-      const dot = document.createElement("span");
-      dot.className = "dot" + (c.status === "Completed" ? " on" : "");
-      btn.appendChild(dot);
-
-      const meta = document.createElement("span");
-      meta.className = "batchMeta";
-      meta.innerHTML = `
-        <span class="batchName">${id}</span>
-        <span class="batchStatus">${c.status}</span>
-      `;
-      btn.appendChild(meta);
-
-      btn.addEventListener("click", () => {
-        state.active = id;
-        touchMeta();
-        saveLocal();
-        renderAll();
-        scheduleCloudSave(false);
-      });
-
-      els.batchList.appendChild(btn);
-    });
-
-    els.cartId.value = state.active;
-  }
-
-  function loadCartToForm(c) {
-    els.cartId.value = c.id;
-
-    els.firstSupply.value = c.firstSupply || "";
-    els.cartNumber.value = c.cartNumber || "";
-    els.date.value = c.date || todayISO();
-    els.checkDone.value = c.checkDone || todayISO();
-    els.tech.value = c.tech || "";
-
-    els.firstDrugExp.value = c.firstDrugExp || "";
-    els.drugName.value = c.drugName || "";
-    els.lockNumber.value = c.lockNumber || "";
-    els.drugCheckDone.value = c.drugCheckDone || "";
-    els.initials.value = c.initials || "";
-  }
-
-  function renderSticker(c) {
-    els.sFacility.textContent = state.header.facility;
-    els.sDept.textContent = state.header.dept;
-    els.sPhone.textContent = state.header.phone;
-
-    els.sFirstSupply.textContent = c.firstSupply || "—";
-    els.sCartNum.textContent = c.cartNumber || "—";
-    els.sDate.textContent = c.date ? prettyDate(c.date) : "—";
-    els.sCheckDone.textContent = c.checkDone ? prettyDate(c.checkDone) : "—";
-    els.sTech.textContent = c.tech || "—";
-
-    els.sFirstDrug.textContent = c.firstDrugExp ? prettyDate(c.firstDrugExp) : "—";
-    els.sDrugName.textContent = c.drugName || "—";
-    els.sLock.textContent = c.lockNumber || "—";
-    els.sDrugCheckDone.textContent = c.drugCheckDone ? prettyDate(c.drugCheckDone) : "—";
-    els.sInitials.textContent = c.initials || "—";
-  }
-
-  // ---------- Print ----------
-  function openPrintAll() {
-    const html = buildPrintHTML();
-    const w = window.open("", "_blank");
-    if (!w) { alert("Popup blocked. Allow popups to print/export."); return; }
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
-  }
-
-  function buildPrintHTML() {
-    const css = `
-      body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;margin:18px;color:#111}
-      h1{margin:0 0 10px}
-      .grid{display:grid;grid-template-columns:1fr;gap:14px}
-      .sticker{border-radius:14px;overflow:hidden;border:1px solid rgba(0,0,0,.15)}
-      .green{background:rgba(163,230,53,.92)}
-      .orange{background:rgba(251,146,60,.92)}
-      .header{padding:14px 14px 6px;line-height:1.15}
-      .facility{font-weight:900;font-size:18px}
-      .dept{font-weight:800;margin-top:4px}
-      .phone{font-weight:800;text-decoration:underline;margin-top:4px}
-      .title{text-align:center;font-weight:1000;letter-spacing:.8px;padding:10px 14px;border-top:1px solid rgba(0,0,0,.15);border-bottom:1px solid rgba(0,0,0,.15);font-size:26px}
-      .title.small{font-size:24px;border-top:none}
-      .lines{padding:10px 14px 14px}
-      .row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid rgba(0,0,0,.12);font-weight:850}
-      .row:last-child{border-bottom:none}
-      .fill{font-weight:950;min-width:160px;text-align:right}
-      .badge{display:inline-block;margin:10px 0 0;padding:4px 10px;border-radius:999px;background:#fff;border:1px solid rgba(0,0,0,.12);font-weight:900}
-      @media print{button{display:none} body{margin:0}}
+  def.sections.forEach((sec, sIdx) => {
+    bodyHTML += `
+      <tr class="section-row">
+        <td colspan="${def.columns.length}">${sec.name}</td>
+      </tr>
     `;
 
-    const ids = ["CC-01","CC-02","CC-03","CC-04"];
-    const code = escapeHtml(normalizeCode(els.batchCode.value));
+    sec.rows.forEach((label, rIdx) => {
+      const rowId = `${type}__${sIdx}__${rIdx}`;
+      const row = state.rows[rowId] || {};
 
-    const blocks = ids.map(id => {
-      const c = state.carts[id];
-      const status = c.status === "Completed" ? "COMPLETED" : "DRAFT";
-
-      return `
-        <div class="badge">${id} • ${status} • ${code}</div>
-
-        <div class="sticker green">
-          <div class="header">
-            <div class="facility">${escapeHtml(state.header.facility)}</div>
-            <div class="dept">${escapeHtml(state.header.dept)}</div>
-            <div class="phone">${escapeHtml(state.header.phone)}</div>
-          </div>
-          <div class="title">CRASH CART CHECK</div>
-          <div class="lines">
-            <div class="row"><span>First supply to expire:</span><span class="fill">${escapeHtml(c.firstSupply||"—")}</span></div>
-            <div class="row"><span>Cart #:</span><span class="fill">${escapeHtml(c.cartNumber||"—")}</span></div>
-            <div class="row"><span>Date:</span><span class="fill">${c.date ? escapeHtml(prettyDate(c.date)) : "—"}</span></div>
-            <div class="row"><span>Check Date done:</span><span class="fill">${c.checkDone ? escapeHtml(prettyDate(c.checkDone)) : "—"}</span></div>
-            <div class="row"><span>CS tech:</span><span class="fill">${escapeHtml(c.tech||"—")}</span></div>
-          </div>
-        </div>
-
-        <div class="sticker orange" style="margin-top:10px">
-          <div class="title small">Crash Cart Check</div>
-          <div class="lines">
-            <div class="row"><span>First Drug to Exp:</span><span class="fill">${c.firstDrugExp ? escapeHtml(prettyDate(c.firstDrugExp)) : "—"}</span></div>
-            <div class="row"><span>Name of Drug:</span><span class="fill">${escapeHtml(c.drugName||"—")}</span></div>
-            <div class="row"><span>Lock Number:</span><span class="fill">${escapeHtml(c.lockNumber||"—")}</span></div>
-            <div class="row"><span>Check done on:</span><span class="fill">${c.drugCheckDone ? escapeHtml(prettyDate(c.drugCheckDone)) : "—"}</span></div>
-            <div class="row"><span>Initials:</span><span class="fill">${escapeHtml(c.initials||"—")}</span></div>
-          </div>
-        </div>
+      bodyHTML += `
+        <tr data-rowid="${rowId}">
+          <td class="cell-label">${label}</td>
+          <td><input class="cell" data-field="cart" placeholder="#" value="${row.cart || ""}"></td>
+          <td><input class="cell" data-field="central" placeholder="MM-DD-YY" value="${row.central || ""}"></td>
+          <td><input class="cell" data-field="medbox" placeholder="MM-DD-YY" value="${row.medbox || ""}"></td>
+          <td><input class="cell" data-field="checked" placeholder="Initials" value="${row.checked || ""}"></td>
+          <td><input class="cell" data-field="notes" placeholder="Note" value="${row.notes || ""}"></td>
+        </tr>
       `;
-    }).join("<div style='height:14px'></div>");
+    });
+  });
 
-    return `
-      <!doctype html>
-      <html>
-      <head><meta charset="utf-8"><title>Crash Cart Batch Print</title><style>${css}</style></head>
-      <body>
-        <button onclick="window.print()">Print / Save as PDF</button>
-        <h1>Crash Cart Batch • ${code}</h1>
-        <div class="grid">${blocks}</div>
-      </body>
-      </html>
-    `;
-  }
+  bodyHTML += `</tbody>`;
 
-  function getActive() {
-    return state.carts[state.active];
-  }
+  checklistContainer.innerHTML = `
+    ${head}
+    <div class="table-wrap">
+      <table>
+        ${tableHead}
+        ${bodyHTML}
+      </table>
+    </div>
+  `;
 
-  // ---------- Local storage ----------
-  function saveLocal() {
-    localStorage.setItem(LOCAL_KEY, JSON.stringify(state));
-  }
+  attachAutosave(dept, type);
+}
 
-  function loadLocal() {
-    try {
-      const raw = localStorage.getItem(LOCAL_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
+function attachAutosave(dept, type) {
+  const table = checklistContainer.querySelector("table");
+  if (!table) return;
+
+  table.addEventListener("input", (e) => {
+    const input = e.target;
+    if (!(input instanceof HTMLInputElement)) return;
+
+    const tr = input.closest("tr[data-rowid]");
+    if (!tr) return;
+
+    const rowId = tr.getAttribute("data-rowid");
+    const field = input.getAttribute("data-field");
+    if (!rowId || !field) return;
+
+    const state = loadLocal(dept, type) || defaultState();
+    state.rows = state.rows || {};
+    state.rows[rowId] = state.rows[rowId] || {};
+    state.rows[rowId][field] = input.value;
+
+    touchMeta(state, dept, type);
+    saveLocal(dept, type, state);
+
+    scheduleCloudSave(false);
+  });
+}
+
+// -------------------- CSV Export --------------------
+function exportCSV(dept, type) {
+  const def = CART_DEFS[type];
+  const state = loadLocal(dept, type) || defaultState();
+
+  const lines = [];
+  lines.push(["Department", "Cart Type", ...def.columns].map(escapeCSV).join(","));
+
+  def.sections.forEach((sec, sIdx) => {
+    lines.push([dept, type, sec.name, "", "", "", "", ""].map(escapeCSV).join(","));
+
+    sec.rows.forEach((label, rIdx) => {
+      const rowId = `${type}__${sIdx}__${rIdx}`;
+      const row = state.rows[rowId] || {};
+
+      lines.push([
+        dept,
+        type,
+        label,
+        row.cart || "",
+        row.central || "",
+        row.medbox || "",
+        row.checked || "",
+        row.notes || ""
+      ].map(escapeCSV).join(","));
+    });
+  });
+
+  const csv = lines.join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  const ts = new Date().toISOString().slice(0, 10);
+  const filename = `unitflow_${dept}_${type}_${ts}.csv`;
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// -------------------- Wiring --------------------
+function hideControls() {
+  cartTypeSelect.classList.add("hidden");
+  btnClear.classList.add("hidden");
+  btnExport.classList.add("hidden");
+  checklistContainer.innerHTML = "";
+  setStatus("Select a Department, then choose Cart Type.");
+  setCloudStatus("Cloud: —");
+}
+
+function showControls() {
+  cartTypeSelect.classList.remove("hidden");
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  connectFirestore();
+
+  // Initial UI state
+  hideControls();
+
+  departmentSelect.addEventListener("change", () => {
+    const dept = departmentSelect.value;
+
+    if (!dept) {
+      cartTypeSelect.value = "";
+      hideControls();
+      return;
     }
+
+    showControls();
+    setStatus(`Department: ${dept} — choose Cart Type.`);
+  });
+
+  cartTypeSelect.addEventListener("change", () => {
+    const dept = departmentSelect.value;
+    const type = cartTypeSelect.value;
+
+    if (!dept || !type) return;
+
+    btnClear.classList.remove("hidden");
+    btnExport.classList.remove("hidden");
+
+    // Render from local immediately
+    renderChecklist(dept, type);
+
+    // Join cloud room for this (dept + type)
+    joinCloudRoom(dept, type);
+  });
+
+  btnClear.addEventListener("click", () => {
+    const dept = departmentSelect.value;
+    const type = cartTypeSelect.value;
+    if (!dept || !type) return;
+
+    const ok = confirm("Clear all entries for this Department + Cart Type on this device?");
+    if (!ok) return;
+
+    localStorage.removeItem(storageKey(dept, type));
+    renderChecklist(dept, type);
+    scheduleCloudSave(false);
+  });
+
+  btnExport.addEventListener("click", () => {
+    const dept = departmentSelect.value;
+    const type = cartTypeSelect.value;
+    if (!dept || !type) return;
+    exportCSV(dept, type);
+  });
+
+  // Optional “Join” button support (if you add batchCode + btnJoin later)
+  if (btnJoinEl) {
+    btnJoinEl.addEventListener("click", () => {
+      const dept = departmentSelect.value;
+      const type = cartTypeSelect.value;
+      if (!dept || !type) return;
+
+      const code = batchCodeEl ? batchCodeEl.value : "";
+      if (code) setBatchCode(code);
+
+      joinCloudRoom(dept, type);
+    });
   }
 });
