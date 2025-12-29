@@ -1,637 +1,335 @@
-/* Crash Cart Batch v1 (PHI-free) */
+/* Clean 4-cart batch (GitHub Pages / LocalStorage) */
 
-const STORAGE_KEY = "cc_batch_v1";
+const KEY = "cc_clean_batch_v1";
 
-const $ = (id) => document.getElementById(id);
+const els = {
+  batchList: document.getElementById("batchList"),
+  btnPrintAll: document.getElementById("btnPrintAll"),
+  btnClear: document.getElementById("btnClear"),
+  btnSubmitCart: document.getElementById("btnSubmitCart"),
+  btnUnsubmitCart: document.getElementById("btnUnsubmitCart"),
 
-const state = loadState() || {
-  settings: {
-    defaultFacility: "Providence Holy Cross",
-    defaultUnit: ""
-  },
-  carts: [
-    makeNewCart("CC-01"),
-  ],
-  activeCartId: null
+  // inputs
+  firstSupply: document.getElementById("firstSupply"),
+  date: document.getElementById("date"),
+  checkDone: document.getElementById("checkDone"),
+  tech: document.getElementById("tech"),
+
+  firstDrugExp: document.getElementById("firstDrugExp"),
+  drugName: document.getElementById("drugName"),
+  lockNumber: document.getElementById("lockNumber"),
+  drugCheckDone: document.getElementById("drugCheckDone"),
+  initials: document.getElementById("initials"),
+  cartId: document.getElementById("cartId"),
+
+  // sticker
+  sFacility: document.getElementById("sFacility"),
+  sDept: document.getElementById("sDept"),
+  sPhone: document.getElementById("sPhone"),
+  sFirstSupply: document.getElementById("sFirstSupply"),
+  sDate: document.getElementById("sDate"),
+  sCheckDone: document.getElementById("sCheckDone"),
+  sTech: document.getElementById("sTech"),
+
+  sFirstDrug: document.getElementById("sFirstDrug"),
+  sDrugName: document.getElementById("sDrugName"),
+  sLock: document.getElementById("sLock"),
+  sDrugCheckDone: document.getElementById("sDrugCheckDone"),
+  sInitials: document.getElementById("sInitials"),
 };
 
-if (!state.activeCartId && state.carts.length) state.activeCartId = state.carts[0].id;
-
-const ui = {
-  // tabs
-  tabs: Array.from(document.querySelectorAll(".tab")),
-  panels: {
-    builder: $("tab-builder"),
-    batch: $("tab-batch"),
-    settings: $("tab-settings")
-  },
-
-  // builder controls
-  cartSelect: $("cartSelect"),
-  statusBadge: $("statusBadge"),
-  facility: $("facility"),
-  unit: $("unit"),
-  cartId: $("cartId"),
-  seal: $("seal"),
-  checkDate: $("checkDate"),
-  checkedBy: $("checkedBy"),
-  notes: $("notes"),
-
-  // sticker preview
-  sFacility: $("sFacility"),
-  sUnit: $("sUnit"),
-  sCartId: $("sCartId"),
-  sSeal: $("sSeal"),
-  sDate: $("sDate"),
-  sBy: $("sBy"),
-  sStatus: $("sStatus"),
-  sNotes: $("sNotes"),
-  summary: $("summary"),
-
-  // supply items
-  itemsBody: $("itemsBody"),
-
-  // batch
-  batchBody: $("batchBody"),
-
-  // settings
-  defaultFacility: $("defaultFacility"),
-  defaultUnit: $("defaultUnit")
+const todayISO = () => {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const dd = String(d.getDate()).padStart(2,"0");
+  return `${yyyy}-${mm}-${dd}`;
 };
 
-// ------------------ INIT ------------------
-bindTabs();
+const defaultState = () => ({
+  header: {
+    facility: "Providence Holy Cross Hospital",
+    dept: "Central Department",
+    phone: "818-496-1190",
+  },
+  active: "CC-01",
+  carts: {
+    "CC-01": blankCart("CC-01"),
+    "CC-02": blankCart("CC-02"),
+    "CC-03": blankCart("CC-03"),
+    "CC-04": blankCart("CC-04"),
+  }
+});
+
+function blankCart(id){
+  return {
+    id,
+    status: "Draft",          // Draft | Completed
+    completedAt: null,
+
+    firstSupply: "",
+    date: todayISO(),
+    checkDone: todayISO(),
+    tech: "",
+
+    firstDrugExp: "",
+    drugName: "",
+    lockNumber: "",
+    drugCheckDone: "",
+    initials: ""
+  };
+}
+
+let state = load() || defaultState();
+
+// -------- INIT --------
+renderBatch();
+loadCartToForm(getActive());
+renderSticker(getActive());
+
+bindLiveInputs();
 bindButtons();
-bindInputs();
-renderAll();
 
-// ------------------ TABS ------------------
-function bindTabs(){
-  ui.tabs.forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      ui.tabs.forEach(b=>b.classList.remove("active"));
-      btn.classList.add("active");
-      const tab = btn.dataset.tab;
-      Object.values(ui.panels).forEach(p=>p.classList.remove("active"));
-      ui.panels[tab].classList.add("active");
-
-      ui.tabs.forEach(b=>b.setAttribute("aria-selected", b === btn ? "true":"false"));
-      if (tab === "batch") renderBatch();
-      if (tab === "settings") renderSettings();
-    });
-  });
-}
-
-// ------------------ BUTTONS ------------------
-function bindButtons(){
-  $("btnNewCart").addEventListener("click", ()=>{
-    const nextName = suggestNextCartName();
-    const c = makeNewCart(nextName);
-    state.carts.push(c);
-    state.activeCartId = c.id;
-    saveAndRender();
-  });
-
-  $("btnDupCart").addEventListener("click", ()=>{
-    const a = getActiveCart();
-    if (!a) return;
-    const dup = structuredClone(a);
-    dup.id = uid();
-    dup.cartId = suggestNextCartName();
-    dup.status = "Draft";
-    dup.submittedAt = null;
-    state.carts.push(dup);
-    state.activeCartId = dup.id;
-    saveAndRender();
-  });
-
-  $("btnSaveCart").addEventListener("click", ()=>{
-    // already live-bound; just force save + status
-    const a = getActiveCart();
-    if (!a) return;
-    if (a.status !== "Submitted") a.status = "Draft";
-    saveAndRender();
-    flashPill("Saved");
-  });
-
-  $("btnAddItem").addEventListener("click", ()=>{
-    const a = getActiveCart();
-    if (!a) return;
-    a.items.push({ id: uid(), name:"", par:"", qty:"", status:"OK" });
-    saveAndRender();
-  });
-
-  $("btnClearItems").addEventListener("click", ()=>{
-    const a = getActiveCart();
-    if (!a) return;
-    a.items = [];
-    saveAndRender();
-  });
-
-  $("btnOpenPrint").addEventListener("click", ()=>{
-    const a = getActiveCart();
-    if (!a) return;
-    openPrintableForCarts([a], { title: "Crash Cart Sticker" });
-  });
-
-  $("btnExportCSV").addEventListener("click", ()=>{
-    const a = getActiveCart();
-    if (!a) return;
-    downloadCSVForCarts([a], "crash_cart_single.csv");
-  });
-
-  $("btnSubmitBatch").addEventListener("click", ()=>{
-    const now = new Date().toISOString();
-    state.carts.forEach(c=>{
-      if (c.status !== "Submitted") {
-        c.status = "Submitted";
-        c.submittedAt = now;
-      }
-    });
-    saveAndRender();
-    flashPill("Batch Submitted");
-    // jump to batch tab visually updated
-    renderBatch();
-  });
-
-  $("btnOpenBatchPrint").addEventListener("click", ()=>{
-    openPrintableForCarts(state.carts, { title: "Crash Cart Batch (Printable)" });
-  });
-
-  $("btnBatchCSV").addEventListener("click", ()=>{
-    downloadCSVForCarts(state.carts, "crash_cart_batch.csv");
-  });
-
-  $("btnSeedFour").addEventListener("click", ()=>{
-    // Create CC-01..CC-04 if not present
-    const existing = new Set(state.carts.map(c=>c.cartId));
-    ["CC-01","CC-02","CC-03","CC-04"].forEach(name=>{
-      if (!existing.has(name)) state.carts.push(makeNewCart(name));
-    });
-    if (!state.activeCartId && state.carts.length) state.activeCartId = state.carts[0].id;
-    saveAndRender();
-  });
-
-  $("btnClearAll").addEventListener("click", ()=>{
-    if (!confirm("Clear ALL local data? This cannot be undone.")) return;
-    localStorage.removeItem(STORAGE_KEY);
-    location.reload();
-  });
-
-  ui.cartSelect.addEventListener("change", ()=>{
-    state.activeCartId = ui.cartSelect.value;
-    saveAndRender();
-  });
-}
-
-// ------------------ INPUTS (LIVE WRITE TO STICKER FIX) ------------------
-function bindInputs(){
-  const handlers = [
-    ["facility", "facility"],
-    ["unit", "unit"],
-    ["cartId", "cartId"],
-    ["seal", "seal"],
-    ["checkDate", "checkDate"],
-    ["checkedBy", "checkedBy"],
-    ["notes", "notes"]
+// -------- BINDINGS --------
+function bindLiveInputs(){
+  const map = [
+    ["firstSupply","firstSupply"],
+    ["date","date"],
+    ["checkDone","checkDone"],
+    ["tech","tech"],
+    ["firstDrugExp","firstDrugExp"],
+    ["drugName","drugName"],
+    ["lockNumber","lockNumber"],
+    ["drugCheckDone","drugCheckDone"],
+    ["initials","initials"],
   ];
 
-  handlers.forEach(([inputId, key])=>{
-    $(inputId).addEventListener("input", (e)=>{
-      const a = getActiveCart();
-      if (!a) return;
-      if (a.status === "Submitted") return; // lock submitted carts
-      a[key] = e.target.value;
-      if (a.status !== "Submitted") a.status = "Draft";
-      saveAndRender(false); // avoid full redraw loops
-      renderSticker(a);     // ensure sticker updates instantly
-      renderSummary(a);
+  map.forEach(([elName, key])=>{
+    els[elName].addEventListener("input", (e)=>{
+      const c = getActive();
+      if (!c) return;
+      c[key] = e.target.value;
+      // editing flips back to Draft if it was completed (optional but clean)
+      if (c.status === "Completed") {
+        c.status = "Draft";
+        c.completedAt = null;
+      }
+      save();
+      renderSticker(c);
+      renderBatch(); // keep bullets accurate
     });
   });
-
-  // settings
-  ui.defaultFacility.addEventListener("input", (e)=>{
-    state.settings.defaultFacility = e.target.value;
-    saveState();
-  });
-  ui.defaultUnit.addEventListener("input", (e)=>{
-    state.settings.defaultUnit = e.target.value;
-    saveState();
-  });
 }
 
-// ------------------ RENDER ------------------
-function renderAll(){
-  renderCartSelect();
-  const a = getActiveCart();
-  renderForm(a);
-  renderSticker(a);
-  renderItemsTable(a);
-  renderSummary(a);
-  renderBatch();
-  renderSettings();
-}
-
-function saveAndRender(full=true){
-  saveState();
-  if (full) renderAll();
-}
-
-function renderCartSelect(){
-  ui.cartSelect.innerHTML = "";
-  state.carts.forEach(c=>{
-    const opt = document.createElement("option");
-    opt.value = c.id;
-    opt.textContent = `${c.cartId || "Unnamed"} • ${c.unit || "—"} • ${c.status}`;
-    ui.cartSelect.appendChild(opt);
-  });
-  ui.cartSelect.value = state.activeCartId;
-}
-
-function renderForm(cart){
-  if (!cart) return;
-
-  ui.statusBadge.value = cart.status || "Draft";
-
-  // lock if submitted
-  const locked = cart.status === "Submitted";
-  [ui.facility, ui.unit, ui.cartId, ui.seal, ui.checkDate, ui.checkedBy, ui.notes].forEach(el=>{
-    el.disabled = locked;
+function bindButtons(){
+  els.btnSubmitCart.addEventListener("click", ()=>{
+    const c = getActive();
+    if (!c) return;
+    c.status = "Completed";
+    c.completedAt = new Date().toISOString();
+    save();
+    renderBatch();
+    renderSticker(c);
   });
 
-  ui.facility.value  = cart.facility ?? "";
-  ui.unit.value      = cart.unit ?? "";
-  ui.cartId.value    = cart.cartId ?? "";
-  ui.seal.value      = cart.seal ?? "";
-  ui.checkDate.value = cart.checkDate ?? "";
-  ui.checkedBy.value = cart.checkedBy ?? "";
-  ui.notes.value     = cart.notes ?? "";
-}
+  els.btnUnsubmitCart.addEventListener("click", ()=>{
+    const c = getActive();
+    if (!c) return;
+    c.status = "Draft";
+    c.completedAt = null;
+    save();
+    renderBatch();
+    renderSticker(c);
+  });
 
-function renderSticker(cart){
-  if (!cart) return;
+  els.btnClear.addEventListener("click", ()=>{
+    if (!confirm("Clear ALL saved data?")) return;
+    localStorage.removeItem(KEY);
+    state = defaultState();
+    save();
+    renderBatch();
+    loadCartToForm(getActive());
+    renderSticker(getActive());
+  });
 
-  ui.sFacility.textContent = cart.facility || state.settings.defaultFacility || "—";
-  ui.sUnit.textContent = cart.unit || "—";
-  ui.sCartId.textContent = cart.cartId || "—";
-  ui.sSeal.textContent = cart.seal || "—";
-
-  ui.sDate.textContent = cart.checkDate ? formatDate(cart.checkDate) : "—";
-  ui.sBy.textContent = cart.checkedBy || "—";
-
-  ui.sStatus.textContent = cart.status || "Draft";
-  ui.sNotes.textContent = cart.notes || "—";
-
-  // status badge styling
-  ui.statusBadge.value = cart.status || "Draft";
-}
-
-function renderItemsTable(cart){
-  ui.itemsBody.innerHTML = "";
-  if (!cart) return;
-
-  cart.items.forEach(item=>{
-    const tr = document.createElement("tr");
-
-    tr.appendChild(tdInput(item, "name", "Item name"));
-    tr.appendChild(tdInput(item, "par", "Par"));
-    tr.appendChild(tdInput(item, "qty", "Qty"));
-    tr.appendChild(tdSelect(item, "status", ["OK","LOW","OUT","NEEDS REPLENISH"]));
-
-    const td = document.createElement("td");
-    const btn = document.createElement("button");
-    btn.className = "btn ghost";
-    btn.textContent = "Remove";
-    btn.addEventListener("click", ()=>{
-      if (cart.status === "Submitted") return;
-      cart.items = cart.items.filter(x=>x.id !== item.id);
-      saveAndRender();
-    });
-    td.appendChild(btn);
-    tr.appendChild(td);
-
-    ui.itemsBody.appendChild(tr);
+  els.btnPrintAll.addEventListener("click", ()=>{
+    openPrintAll();
   });
 }
 
-function renderSummary(cart){
-  if (!cart) { ui.summary.textContent = ""; return; }
-
-  const items = cart.items || [];
-  const low = items.filter(i=>String(i.status||"").includes("LOW") || String(i.status||"").includes("OUT") || String(i.status||"").includes("NEEDS")).length;
-
-  ui.summary.innerHTML = `
-    <div><span class="muted">Facility:</span> ${escapeHtml(cart.facility || state.settings.defaultFacility || "—")}</div>
-    <div><span class="muted">Unit:</span> ${escapeHtml(cart.unit || "—")}</div>
-    <div><span class="muted">Cart:</span> ${escapeHtml(cart.cartId || "—")}</div>
-    <div><span class="muted">Seal:</span> ${escapeHtml(cart.seal || "—")}</div>
-    <div><span class="muted">Checked:</span> ${cart.checkDate ? formatDate(cart.checkDate) : "—"} <span class="muted">by</span> ${escapeHtml(cart.checkedBy || "—")}</div>
-    <div><span class="muted">Items:</span> ${items.length} total • ${low} flagged</div>
-    <div><span class="muted">Status:</span> ${escapeHtml(cart.status || "Draft")} ${cart.submittedAt ? `• <span class="muted">Submitted</span> ${new Date(cart.submittedAt).toLocaleString()}` : ""}</div>
-  `;
-}
-
+// -------- RENDER --------
 function renderBatch(){
-  ui.batchBody.innerHTML = "";
-  state.carts.forEach(c=>{
-    const tr = document.createElement("tr");
+  els.batchList.innerHTML = "";
 
-    tr.appendChild(tdText(c.cartId || "—"));
-    tr.appendChild(tdText(c.unit || "—"));
-    tr.appendChild(tdText(c.seal || "—"));
-    tr.appendChild(tdText(c.checkedBy || "—"));
-    tr.appendChild(tdText(c.checkDate ? formatDate(c.checkDate) : "—"));
-    tr.appendChild(tdText(c.status || "Draft"));
-    tr.appendChild(tdText(c.submittedAt ? new Date(c.submittedAt).toLocaleString() : "—"));
+  ["CC-01","CC-02","CC-03","CC-04"].forEach(id=>{
+    const c = state.carts[id];
+    const btn = document.createElement("button");
+    btn.className = "batchBtn" + (state.active === id ? " active" : "");
+    btn.type = "button";
 
-    const td = document.createElement("td");
-    const openBtn = document.createElement("button");
-    openBtn.className = "btn";
-    openBtn.textContent = "Open";
-    openBtn.addEventListener("click", ()=>{
-      state.activeCartId = c.id;
-      saveAndRender();
-      // switch to builder tab
-      document.querySelector('.tab[data-tab="builder"]').click();
+    const dot = document.createElement("span");
+    dot.className = "dot" + (c.status === "Completed" ? " on" : "");
+    btn.appendChild(dot);
+
+    const meta = document.createElement("span");
+    meta.className = "batchMeta";
+    meta.innerHTML = `
+      <span class="batchName">${id}</span>
+      <span class="batchStatus">${c.status}${c.completedAt ? " • done" : ""}</span>
+    `;
+    btn.appendChild(meta);
+
+    btn.addEventListener("click", ()=>{
+      state.active = id;
+      save();
+      renderBatch();
+      loadCartToForm(getActive());
+      renderSticker(getActive());
     });
 
-    const delBtn = document.createElement("button");
-    delBtn.className = "btn danger";
-    delBtn.textContent = "Delete";
-    delBtn.style.marginLeft = "8px";
-    delBtn.addEventListener("click", ()=>{
-      if (!confirm(`Delete ${c.cartId || "this cart"}?`)) return;
-      state.carts = state.carts.filter(x=>x.id !== c.id);
-      if (!state.carts.length) state.carts.push(makeNewCart("CC-01"));
-      state.activeCartId = state.carts[0].id;
-      saveAndRender();
-    });
-
-    td.appendChild(openBtn);
-    td.appendChild(delBtn);
-    tr.appendChild(td);
-
-    ui.batchBody.appendChild(tr);
+    els.batchList.appendChild(btn);
   });
+
+  // show active cart id in form
+  els.cartId.value = state.active;
 }
 
-function renderSettings(){
-  ui.defaultFacility.value = state.settings.defaultFacility || "";
-  ui.defaultUnit.value = state.settings.defaultUnit || "";
+function loadCartToForm(c){
+  if (!c) return;
+  els.cartId.value = c.id;
+
+  els.firstSupply.value = c.firstSupply || "";
+  els.date.value = c.date || todayISO();
+  els.checkDone.value = c.checkDone || todayISO();
+  els.tech.value = c.tech || "";
+
+  els.firstDrugExp.value = c.firstDrugExp || "";
+  els.drugName.value = c.drugName || "";
+  els.lockNumber.value = c.lockNumber || "";
+  els.drugCheckDone.value = c.drugCheckDone || "";
+  els.initials.value = c.initials || "";
 }
 
-// ------------------ TABLE CELL HELPERS ------------------
-function tdInput(item, key, placeholder){
-  const td = document.createElement("td");
-  const input = document.createElement("input");
-  input.value = item[key] ?? "";
-  input.placeholder = placeholder;
-  input.addEventListener("input", (e)=>{
-    const cart = getActiveCart();
-    if (!cart || cart.status === "Submitted") return;
-    item[key] = e.target.value;
-    cart.status = "Draft";
-    saveAndRender(false);
-    renderSummary(cart);
-  });
-  td.appendChild(input);
-  return td;
+function renderSticker(c){
+  // header
+  els.sFacility.textContent = state.header.facility;
+  els.sDept.textContent = state.header.dept;
+  els.sPhone.textContent = state.header.phone;
+
+  // green sticker fields
+  els.sFirstSupply.textContent = c.firstSupply || "—";
+  els.sDate.textContent = c.date ? prettyDate(c.date) : "—";
+  els.sCheckDone.textContent = c.checkDone ? prettyDate(c.checkDone) : "—";
+  els.sTech.textContent = c.tech || "—";
+
+  // orange sticker fields
+  els.sFirstDrug.textContent = c.firstDrugExp ? prettyDate(c.firstDrugExp) : "—";
+  els.sDrugName.textContent = c.drugName || "—";
+  els.sLock.textContent = c.lockNumber || "—";
+  els.sDrugCheckDone.textContent = c.drugCheckDone ? prettyDate(c.drugCheckDone) : "—";
+  els.sInitials.textContent = c.initials || "—";
 }
 
-function tdSelect(item, key, options){
-  const td = document.createElement("td");
-  const sel = document.createElement("select");
-  options.forEach(opt=>{
-    const o = document.createElement("option");
-    o.value = opt; o.textContent = opt;
-    sel.appendChild(o);
-  });
-  sel.value = item[key] ?? options[0];
-  sel.addEventListener("change", (e)=>{
-    const cart = getActiveCart();
-    if (!cart || cart.status === "Submitted") return;
-    item[key] = e.target.value;
-    cart.status = "Draft";
-    saveAndRender(false);
-    renderSummary(cart);
-  });
-  td.appendChild(sel);
-  return td;
-}
-
-function tdText(text){
-  const td = document.createElement("td");
-  td.textContent = text;
-  return td;
-}
-
-// ------------------ EXPORTS ------------------
-function openPrintableForCarts(carts, { title } = {}){
-  const html = buildPrintableHTML(carts, title || "Crash Cart Printable");
+// -------- PRINT ALL (4 stickers clean) --------
+function openPrintAll(){
+  const html = buildPrintHTML();
   const w = window.open("", "_blank");
-  if (!w) { alert("Popup blocked. Allow popups to open printable view."); return; }
+  if (!w) { alert("Popup blocked. Allow popups to print/export."); return; }
   w.document.open();
   w.document.write(html);
   w.document.close();
 }
 
-function downloadCSVForCarts(carts, filename){
-  const rows = [];
-  rows.push([
-    "facility","unit","cartId","seal","checkDate","checkedBy","notes","status","submittedAt",
-    "itemName","par","qty","itemStatus"
-  ]);
-
-  carts.forEach(c=>{
-    if (!c.items || !c.items.length) {
-      rows.push([
-        c.facility||"", c.unit||"", c.cartId||"", c.seal||"", c.checkDate||"", c.checkedBy||"",
-        c.notes||"", c.status||"", c.submittedAt||"", "", "", "", ""
-      ]);
-      return;
-    }
-    c.items.forEach(it=>{
-      rows.push([
-        c.facility||"", c.unit||"", c.cartId||"", c.seal||"", c.checkDate||"", c.checkedBy||"",
-        c.notes||"", c.status||"", c.submittedAt||"",
-        it.name||"", it.par||"", it.qty||"", it.status||""
-      ]);
-    });
-  });
-
-  const csv = rows.map(r => r.map(csvEscape).join(",")).join("\n");
-  downloadText(csv, filename, "text/csv;charset=utf-8;");
-}
-
-function buildPrintableHTML(carts, title){
+function buildPrintHTML(){
   const css = `
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;margin:24px;color:#111}
-    h1{margin:0 0 12px}
-    .meta{color:#444;margin:0 0 18px}
-    table{width:100%;border-collapse:collapse;margin:14px 0 22px}
-    th,td{border:1px solid #ddd;padding:8px;vertical-align:top}
-    th{background:#f6f6f6;text-transform:uppercase;font-size:12px;letter-spacing:.4px}
-    .badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#eee;font-weight:700}
-    .ok{background:#dcfce7}
-    .draft{background:#fef3c7}
-    .sub{background:#dbeafe}
-    @media print{button{display:none}}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;margin:18px;color:#111}
+    h1{margin:0 0 10px}
+    .grid{display:grid;grid-template-columns:1fr;gap:14px}
+    .sticker{border-radius:14px;overflow:hidden;border:1px solid rgba(0,0,0,.15)}
+    .green{background:rgba(163,230,53,.92)}
+    .orange{background:rgba(251,146,60,.92)}
+    .header{padding:14px 14px 6px;line-height:1.15}
+    .facility{font-weight:900;font-size:18px}
+    .dept{font-weight:800;margin-top:4px}
+    .phone{font-weight:800;text-decoration:underline;margin-top:4px}
+    .title{text-align:center;font-weight:1000;letter-spacing:.8px;padding:10px 14px;border-top:1px solid rgba(0,0,0,.15);border-bottom:1px solid rgba(0,0,0,.15);font-size:26px}
+    .title.small{font-size:24px;border-top:none}
+    .lines{padding:10px 14px 14px}
+    .row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid rgba(0,0,0,.12);font-weight:850}
+    .row:last-child{border-bottom:none}
+    .fill{font-weight:950;min-width:160px;text-align:right}
+    .badge{display:inline-block;margin:10px 0 0;padding:4px 10px;border-radius:999px;background:#fff;border:1px solid rgba(0,0,0,.12);font-weight:900}
+    @media print{button{display:none} body{margin:0}}
   `;
 
-  const now = new Date().toLocaleString();
+  const ids = ["CC-01","CC-02","CC-03","CC-04"];
+  const blocks = ids.map(id=>{
+    const c = state.carts[id];
+    const status = c.status === "Completed" ? "COMPLETED" : "DRAFT";
 
-  const cartRows = carts.map(c=>{
-    const cls = (c.status === "Submitted") ? "sub" : "draft";
-    const submitted = c.submittedAt ? new Date(c.submittedAt).toLocaleString() : "—";
     return `
-      <tr>
-        <td>${escapeHtml(c.facility || "")}</td>
-        <td>${escapeHtml(c.unit || "")}</td>
-        <td>${escapeHtml(c.cartId || "")}</td>
-        <td>${escapeHtml(c.seal || "")}</td>
-        <td>${c.checkDate ? escapeHtml(formatDate(c.checkDate)) : "—"}</td>
-        <td>${escapeHtml(c.checkedBy || "")}</td>
-        <td><span class="badge ${cls}">${escapeHtml(c.status || "Draft")}</span></td>
-        <td>${escapeHtml(submitted)}</td>
-        <td>${escapeHtml(c.notes || "")}</td>
-      </tr>
-    `;
-  }).join("");
+      <div class="badge">${id} • ${status}</div>
 
-  const itemRows = carts.flatMap(c=>{
-    const items = c.items || [];
-    if (!items.length) {
-      return [`
-        <tr>
-          <td>${escapeHtml(c.cartId || "")}</td>
-          <td colspan="4" style="color:#666">No supply items logged</td>
-        </tr>
-      `];
-    }
-    return items.map(it=>`
-      <tr>
-        <td>${escapeHtml(c.cartId || "")}</td>
-        <td>${escapeHtml(it.name || "")}</td>
-        <td>${escapeHtml(it.par || "")}</td>
-        <td>${escapeHtml(it.qty || "")}</td>
-        <td>${escapeHtml(it.status || "")}</td>
-      </tr>
-    `);
-  }).join("");
+      <div class="sticker green">
+        <div class="header">
+          <div class="facility">${escapeHtml(state.header.facility)}</div>
+          <div class="dept">${escapeHtml(state.header.dept)}</div>
+          <div class="phone">${escapeHtml(state.header.phone)}</div>
+        </div>
+        <div class="title">CRASH CART CHECK</div>
+        <div class="lines">
+          <div class="row"><span>First supply to expire:</span><span class="fill">${escapeHtml(c.firstSupply||"—")}</span></div>
+          <div class="row"><span>Date:</span><span class="fill">${c.date?escapeHtml(prettyDate(c.date)):"—"}</span></div>
+          <div class="row"><span>Check Date done:</span><span class="fill">${c.checkDone?escapeHtml(prettyDate(c.checkDone)):"—"}</span></div>
+          <div class="row"><span>CS tech:</span><span class="fill">${escapeHtml(c.tech||"—")}</span></div>
+        </div>
+      </div>
+
+      <div class="sticker orange" style="margin-top:10px">
+        <div class="title small">Crash Cart Check</div>
+        <div class="lines">
+          <div class="row"><span>First Drug to Exp:</span><span class="fill">${c.firstDrugExp?escapeHtml(prettyDate(c.firstDrugExp)):"—"}</span></div>
+          <div class="row"><span>Name of Drug:</span><span class="fill">${escapeHtml(c.drugName||"—")}</span></div>
+          <div class="row"><span>Lock Number:</span><span class="fill">${escapeHtml(c.lockNumber||"—")}</span></div>
+          <div class="row"><span>Check done on:</span><span class="fill">${c.drugCheckDone?escapeHtml(prettyDate(c.drugCheckDone)):"—"}</span></div>
+          <div class="row"><span>Initials:</span><span class="fill">${escapeHtml(c.initials||"—")}</span></div>
+        </div>
+      </div>
+    `;
+  }).join("<div style='height:14px'></div>");
 
   return `
   <!doctype html>
-  <html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${css}</style></head>
+  <html><head><meta charset="utf-8"><title>Crash Cart Batch Print</title><style>${css}</style></head>
   <body>
-    <h1>${escapeHtml(title)}</h1>
-    <p class="meta">Generated: ${escapeHtml(now)} • PHI-free</p>
     <button onclick="window.print()">Print / Save as PDF</button>
-
-    <h2>Carts</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Facility</th><th>Unit</th><th>Cart</th><th>Seal</th><th>Check Date</th><th>Checked By</th>
-          <th>Status</th><th>Submitted</th><th>Notes</th>
-        </tr>
-      </thead>
-      <tbody>${cartRows}</tbody>
-    </table>
-
-    <h2>Supply Items</h2>
-    <table>
-      <thead>
-        <tr><th>Cart</th><th>Item</th><th>Par</th><th>Qty</th><th>Status</th></tr>
-      </thead>
-      <tbody>${itemRows}</tbody>
-    </table>
-  </body></html>
-  `;
+    <h1>Crash Cart Batch</h1>
+    <div class="grid">${blocks}</div>
+  </body></html>`;
 }
 
-// ------------------ STATE ------------------
-function getActiveCart(){
-  return state.carts.find(c=>c.id === state.activeCartId) || state.carts[0] || null;
+// -------- HELPERS / STORAGE --------
+function getActive(){
+  return state.carts[state.active];
 }
 
-function makeNewCart(cartId){
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth()+1).padStart(2,"0");
-  const dd = String(today.getDate()).padStart(2,"0");
-
-  return {
-    id: uid(),
-    facility: state.settings?.defaultFacility || "Providence Holy Cross",
-    unit: state.settings?.defaultUnit || "",
-    cartId: cartId || "",
-    seal: "",
-    checkDate: `${yyyy}-${mm}-${dd}`,
-    checkedBy: "",
-    notes: "",
-    status: "Draft",
-    submittedAt: null,
-    items: []
-  };
+function save(){
+  localStorage.setItem(KEY, JSON.stringify(state));
 }
 
-function suggestNextCartName(){
-  // tries CC-01..CC-99
-  const existing = new Set(state.carts.map(c=>c.cartId).filter(Boolean));
-  for (let i=1; i<=99; i++){
-    const name = `CC-${String(i).padStart(2,"0")}`;
-    if (!existing.has(name)) return name;
-  }
-  return `CC-${Date.now()}`;
-}
-
-function saveState(){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-function loadState(){
+function load(){
   try{
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(KEY);
     return raw ? JSON.parse(raw) : null;
   }catch{
     return null;
   }
 }
 
-// ------------------ UTIL ------------------
-function uid(){
-  return Math.random().toString(16).slice(2) + Date.now().toString(16);
-}
-
-function formatDate(yyyyMmDd){
-  // yyyy-mm-dd -> MMM d, yyyy
+function prettyDate(yyyyMmDd){
   const [y,m,d] = yyyyMmDd.split("-").map(Number);
-  const dt = new Date(y, (m-1), d);
-  return dt.toLocaleDateString(undefined, { year:"numeric", month:"short", day:"numeric" });
-}
-
-function flashPill(text){
-  const prev = ui.statusBadge.value;
-  ui.statusBadge.value = text;
-  setTimeout(()=>{ ui.statusBadge.value = prev; }, 700);
-}
-
-function csvEscape(v){
-  const s = String(v ?? "");
-  if (s.includes('"') || s.includes(",") || s.includes("\n")) return `"${s.replaceAll('"','""')}"`;
-  return s;
-}
-
-function downloadText(text, filename, mime){
-  const blob = new Blob([text], { type: mime || "text/plain" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  const dt = new Date(y, m-1, d);
+  return dt.toLocaleDateString(undefined, { month:"short", day:"numeric", year:"2-digit" });
 }
 
 function escapeHtml(str){
