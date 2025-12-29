@@ -36,6 +36,9 @@
 
       <button id="btnClear" class="control-btn hidden" type="button">Clear</button>
       <button id="btnExport" class="control-btn hidden" type="button">Export CSV</button>
+
+      <!-- ✅ Save indicator (confidence pill) -->
+      <span id="saveIndicator" class="save-indicator hidden">Saved ✅</span>
     </div>
   </header>
 
@@ -43,12 +46,12 @@
     <section class="panel">
       <div id="statusLine" class="status">Select a Department, then choose Cart Type.</div>
 
-      <!-- Live sticker preview (hidden until you focus a row) -->
+      <!-- PHC label-style live sticker preview (hidden until you focus a row) -->
       <div id="stickerPreview" class="sticker hidden"></div>
 
       <div id="checklistContainer" class="checklist"></div>
 
-      <!-- Optional cloud status line (kept subtle/no extra UI clutter) -->
+      <!-- Cloud status line -->
       <div id="cloudStatus" class="cloudline">Cloud: —</div>
     </section>
 
@@ -57,7 +60,6 @@
     </footer>
   </main>
 
-  <!-- REQUIRED for Firebase imports -->
   <script type="module" src="app.js"></script>
 </body>
 </html>
