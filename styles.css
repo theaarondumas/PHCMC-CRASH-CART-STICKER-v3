@@ -5,13 +5,13 @@
   --text:#e7eefc;
   --muted:#a7b3c9;
   --line:#2a3241;
-  --accent:#ff7a18; /* clean orange */
-  --danger:#ff4d4d;
+  --accent:#ff7a18;
   --section:#0f131a;
 }
 
 *{ box-sizing:border-box; }
 html,body{ height:100%; }
+
 body{
   margin:0;
   background:var(--bg);
@@ -59,11 +59,11 @@ body{
   border-radius:10px;
   cursor:pointer;
 }
-
 .control-btn:hover{ border-color:rgba(255,255,255,.25); }
 .hidden{ display:none !important; }
 
 .page{ padding:14px; }
+
 .panel{
   background:var(--panel);
   border:1px solid var(--line);
@@ -150,7 +150,6 @@ input.cell{
   color:var(--text);
   outline:none;
 }
-
 input.cell::placeholder{ color:rgba(167,179,201,.55); }
 
 .footer{
@@ -158,4 +157,67 @@ input.cell::placeholder{ color:rgba(167,179,201,.55); }
   color:var(--muted);
   font-size:12px;
   opacity:.9;
+}
+
+/* -------- Live Sticker Preview (appears only when editing a row) -------- */
+.sticker{
+  margin:12px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:linear-gradient(180deg, rgba(255,122,24,.18), rgba(21,26,35,.94));
+  padding:12px;
+}
+
+.sticker .st-top{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  align-items:flex-start;
+  margin-bottom:10px;
+}
+
+.sticker .st-title{
+  font-weight:900;
+  letter-spacing:.3px;
+}
+
+.sticker .st-sub{
+  color:var(--muted);
+  font-size:12px;
+  margin-top:2px;
+}
+
+.sticker .st-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:8px;
+}
+
+.sticker .st-item{
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;
+  padding:8px 10px;
+  background:rgba(0,0,0,.18);
+}
+
+.sticker .st-label{
+  font-size:11px;
+  color:var(--muted);
+  margin-bottom:4px;
+}
+
+.sticker .st-val{
+  font-weight:850;
+}
+
+.sticker .st-val.miss{
+  opacity:.6;
+}
+
+/* subtle cloud line */
+.cloudline{
+  padding:10px 12px;
+  border-top:1px solid var(--line);
+  color:var(--muted);
+  font-size:12px;
 }
