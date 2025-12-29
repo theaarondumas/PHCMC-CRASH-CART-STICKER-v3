@@ -23,7 +23,6 @@
 
   <main class="wrap">
 
-    <!-- BATCH SELECTOR -->
     <section class="card">
       <div class="card-title">4-Cart Batch</div>
       <div class="batch" id="batchList"></div>
@@ -32,10 +31,11 @@
         <button id="btnSubmitCart" class="btn">Mark Active Cart Completed</button>
         <button id="btnUnsubmitCart" class="btn ghost">Mark Active Cart Draft</button>
       </div>
+
       <div class="hint">Green dot = completed. Tap a cart to open it.</div>
+      <div id="debug" class="hint"></div>
     </section>
 
-    <!-- STICKER PREVIEW (LIKE YOUR FORMAT) -->
     <section class="stickerWrap">
       <div class="sticker green">
         <div class="stickerHeader">
@@ -67,7 +67,6 @@
       </div>
     </section>
 
-    <!-- FORMS (CLEAN) -->
     <section class="card">
       <div class="card-title">Crash Cart Check</div>
 
@@ -137,6 +136,6 @@
     <span class="muted">Auto-saved • Local only</span>
   </footer>
 
-  <script src="app.js"></script>
+  <script defer src="app.js"></script>
 </body>
 </html>
