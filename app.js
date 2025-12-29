@@ -1,11 +1,12 @@
 /* =========================================================
-   UnitFlow — Department + Cart Type Checklists
-   ✅ Live sticker preview while typing
+   UnitFlow — Department + Cart Type Checklists (PHC Style)
+   ✅ Department dropdown + Cart Type dropdown
+   ✅ Dynamic checklist table (Adult / Neonatal / Broselow)
+   ✅ PHC label-style live sticker preview (Green + Orange)
    ✅ Local autosave
    ✅ CSV export
-   ✅ Firestore realtime sync (optional)
-   ✅ Offline persistence (IndexedDB)
-   ✅ Conflict handling (cloud vs local)
+   ✅ Firestore realtime sync + offline persistence (IndexedDB)
+   ✅ Conflict handling + throttled writes
 ========================================================= */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
@@ -18,9 +19,7 @@ import {
   enableIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-/* -------------------- Firebase Config --------------------
-   NOTE: Client config is normal. Real security is Firestore Rules.
----------------------------------------------------------- */
+/* -------------------- Firebase Config -------------------- */
 const firebaseConfig = {
   apiKey: "AIzaSyB-3bjNKIf-00cRu3HtxdsjnM",
   authDomain: "phcmc-crash-cart.firebaseapp.com",
@@ -45,7 +44,11 @@ const btnExport = document.getElementById("btnExport");
 const stickerPreview = document.getElementById("stickerPreview");
 const cloudStatusEl = document.getElementById("cloudStatus");
 
-/* -------------------- Local Keys -------------------- */
+/* -------------------- PHC constants -------------------- */
+const PHC_FACILITY = "Providence Holy Cross Hospital";
+const PHC_PHONE = "818-496-1190";
+
+/* -------------------- Local storage keys -------------------- */
 function storageKey(dept, type) {
   return `unitflow_checklist_${dept || "NONE"}_${type || "NONE"}`;
 }
@@ -94,7 +97,9 @@ function escapeCSV(val) {
   return s;
 }
 
-/* -------------------- Cart Definitions -------------------- */
+/* -------------------- Cart Definitions --------------------
+   Edit sections/rows to match your real sheets 1:1
+---------------------------------------------------------- */
 const CART_DEFS = {
   adult: {
     title: "Adult Crash Cart",
@@ -185,7 +190,7 @@ function defaultBatchCode(dept) {
 }
 
 function cloudDocId(dept, type) {
-  // One doc per dept + cart type per day
+  // One doc per dept + cart type per day (simple & clean)
   const base = defaultBatchCode(dept);
   return `${base}__${deptSlug(dept)}__${String(type).toUpperCase()}`;
 }
@@ -212,7 +217,7 @@ function joinCloudRoom(dept, type) {
   }
 
   currentDocRef = doc(db, "unitflowChecklists", id);
-  setCloudStatus(`Cloud: connecting…`);
+  setCloudStatus("Cloud: connecting…");
 
   unsubscribe = onSnapshot(currentDocRef, (snap) => {
     if (!snap.exists()) {
@@ -237,6 +242,7 @@ function joinCloudRoom(dept, type) {
     }
   });
 
+  // ensure doc exists
   scheduleCloudSave(true);
 }
 
@@ -277,7 +283,7 @@ function scheduleCloudSave(immediate = false) {
   }, delay);
 }
 
-/* -------------------- Live Sticker Preview -------------------- */
+/* -------------------- PHC Sticker Preview -------------------- */
 let activeRowId = null;
 let activeRowLabel = "";
 
@@ -287,40 +293,69 @@ function renderStickerPreview(dept, type, label, row) {
   const val = (x) => (x && String(x).trim() ? String(x) : "—");
   const miss = (x) => (x && String(x).trim() ? "" : " miss");
 
+  const location = label || "—";
+  const cartNum = row.cart || "";
+  const central = row.central || "";
+  const medbox = row.medbox || "";
+  const checkedBy = row.checked || "";
+  const notes = row.notes || "";
+
   stickerPreview.innerHTML = `
-    <div class="st-top">
-      <div>
-        <div class="st-title">Live Sticker Preview</div>
-        <div class="st-sub">${dept} • ${String(type).toUpperCase()} • ${label}</div>
-      </div>
-      <div class="badge">Editing</div>
-    </div>
+    <div class="phcWrap">
 
-    <div class="st-grid">
-      <div class="st-item">
-        <div class="st-label">Cart #</div>
-        <div class="st-val${miss(row.cart)}">${val(row.cart)}</div>
+      <div class="phcSticker phcGreen">
+        <div class="phcHeader">
+          <div class="phcFacility">${PHC_FACILITY}</div>
+          <div class="phcDept">${dept}</div>
+          <div class="phcPhone">${PHC_PHONE}</div>
+        </div>
+
+        <div class="phcTitle">CRASH CART CHECK</div>
+
+        <div class="phcLines">
+          <div class="phcRow">
+            <span>Location:</span>
+            <span class="phcFill">${val(location)}</span>
+          </div>
+
+          <div class="phcRow">
+            <span>Cart #:</span>
+            <span class="phcFill${miss(cartNum)}">${val(cartNum)}</span>
+          </div>
+
+          <div class="phcRow">
+            <span>Central Exp:</span>
+            <span class="phcFill${miss(central)}">${val(central)}</span>
+          </div>
+
+          <div class="phcRow">
+            <span>Med Box Exp:</span>
+            <span class="phcFill${miss(medbox)}">${val(medbox)}</span>
+          </div>
+        </div>
       </div>
 
-      <div class="st-item">
-        <div class="st-label">Checked By</div>
-        <div class="st-val${miss(row.checked)}">${val(row.checked)}</div>
+      <div class="phcSticker phcOrange">
+        <div class="phcTitle small">Crash Cart Check</div>
+
+        <div class="phcLines">
+          <div class="phcRow">
+            <span>Checked By:</span>
+            <span class="phcFill${miss(checkedBy)}">${val(checkedBy)}</span>
+          </div>
+
+          <div class="phcRow">
+            <span>Notes:</span>
+            <span class="phcFill${miss(notes)}">${val(notes)}</span>
+          </div>
+
+          <div class="phcRow">
+            <span>Type:</span>
+            <span class="phcFill">${String(type).toUpperCase()}</span>
+          </div>
+        </div>
       </div>
 
-      <div class="st-item">
-        <div class="st-label">Central Exp</div>
-        <div class="st-val${miss(row.central)}">${val(row.central)}</div>
-      </div>
-
-      <div class="st-item">
-        <div class="st-label">Med Box Exp</div>
-        <div class="st-val${miss(row.medbox)}">${val(row.medbox)}</div>
-      </div>
-
-      <div class="st-item" style="grid-column: 1 / -1;">
-        <div class="st-label">Notes</div>
-        <div class="st-val${miss(row.notes)}">${val(row.notes)}</div>
-      </div>
     </div>
   `;
 
@@ -400,8 +435,6 @@ function renderChecklist(dept, type) {
   `;
 
   attachAutosave(dept, type);
-
-  // If a row was active before re-render, refresh sticker
   updateStickerFromState(dept, type);
 }
 
@@ -409,7 +442,7 @@ function attachAutosave(dept, type) {
   const table = checklistContainer.querySelector("table");
   if (!table) return;
 
-  // When user taps into any field, set that row as active for sticker preview
+  // Focus row -> show PHC sticker preview
   table.addEventListener("focusin", (e) => {
     const tr = e.target.closest("tr[data-rowid]");
     if (!tr) return;
@@ -418,7 +451,7 @@ function attachAutosave(dept, type) {
     updateStickerFromState(dept, type);
   });
 
-  // Live input -> save local + cloud + update sticker
+  // Input -> save local + cloud + update sticker
   table.addEventListener("input", (e) => {
     const input = e.target;
     if (!(input instanceof HTMLInputElement)) return;
@@ -495,6 +528,7 @@ function resetUI() {
   checklistContainer.innerHTML = "";
   setStatus("Select a Department, then choose Cart Type.");
   setCloudStatus("Cloud: —");
+
   if (stickerPreview) stickerPreview.classList.add("hidden");
   activeRowId = null;
   activeRowLabel = "";
