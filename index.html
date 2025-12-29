@@ -16,6 +16,16 @@
     </div>
 
     <div class="topbar-right">
+      <!-- Department dropdown (top right) -->
+      <select id="deptSelect" class="btn" aria-label="Department">
+        <option value="Central Department">Central Department</option>
+        <option value="Emergency Department">Emergency Department</option>
+        <option value="ICU">ICU</option>
+        <option value="OR">OR</option>
+        <option value="PACU">PACU</option>
+        <option value="L&amp;D">L&amp;D</option>
+      </select>
+
       <button id="btnPrintAll" class="btn primary">Print / Export PDF</button>
       <button id="btnClear" class="btn ghost">Clear</button>
     </div>
@@ -23,6 +33,34 @@
 
   <main class="wrap">
 
+    <!-- BATCH CODE (NO LOGIN) -->
+    <section class="card">
+      <div class="card-title">Live Sync (Batch Code)</div>
+
+      <div class="grid2">
+        <label class="field">
+          <span>Batch Code (shared)</span>
+          <input id="batchCode" type="text" placeholder="ex: PHC-ED-20251229-DAY" />
+        </label>
+
+        <label class="field">
+          <span>Actions</span>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button id="btnJoin" class="btn">Join / Sync</button>
+            <button id="btnCopyCode" class="btn ghost">Copy Code</button>
+            <button id="btnRotateCode" class="btn ghost">Rotate Code</button>
+          </div>
+        </label>
+      </div>
+
+      <div id="cloudStatus" class="hint"></div>
+      <div class="hint">
+        No-login mode: anyone with the code can access this batch. Keep it PHI-free.
+      </div>
+      <div id="debug" class="hint"></div>
+    </section>
+
+    <!-- 4 CARTS -->
     <section class="card">
       <div class="card-title">4-Cart Batch</div>
       <div class="batch" id="batchList"></div>
@@ -33,8 +71,6 @@
       </div>
 
       <div class="hint">Green dot = completed. Tap a cart to open it.</div>
-      <div id="debug" class="hint"></div>
-      <div id="cloudStatus" class="hint"></div>
     </section>
 
     <!-- STICKERS -->
@@ -77,12 +113,12 @@
       <div class="grid2">
         <label class="field">
           <span>First supply to expire</span>
-          <input id="firstSupply" type="text" placeholder="(leave blank until you enter)" />
+          <input id="firstSupply" type="text" placeholder="(blank by default)" />
         </label>
 
         <label class="field">
           <span>Cart #</span>
-          <input id="cartNumber" type="text" placeholder="(leave blank until you enter)" />
+          <input id="cartNumber" type="text" placeholder="(blank by default)" />
         </label>
 
         <label class="field">
@@ -113,7 +149,7 @@
 
         <label class="field">
           <span>Name of drug</span>
-          <input id="drugName" type="text" placeholder="(leave blank until you enter)" />
+          <input id="drugName" type="text" placeholder="(blank by default)" />
         </label>
 
         <label class="field">
@@ -128,7 +164,7 @@
 
         <label class="field">
           <span>Initials</span>
-          <input id="initials" type="text" placeholder="(leave blank until you enter)" />
+          <input id="initials" type="text" placeholder="(blank by default)" />
         </label>
 
         <label class="field">
@@ -141,11 +177,10 @@
   </main>
 
   <footer class="footer">
-    <span>Batch: CC-01 → CC-04</span>
+    <span id="footerBatch">Batch Code: —</span>
     <span class="muted">Auto-saved • Local + Firestore</span>
   </footer>
 
-  <!-- app.js will import Firebase modules from CDN -->
   <script type="module" src="app.js"></script>
 </body>
 </html>
