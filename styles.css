@@ -1,14 +1,12 @@
 :root{
-  --bg:#0b0c10;
   --text:#e5e7eb;
   --muted:#9ca3af;
-  --line:#243244;
 
-  --green:#a3e635;
+  --green:#a3e635;   /* sticker yellow/green */
   --orange:#fb923c;
 
-  --dot:#22c55e;
-  --dotOff:#6b7280;
+  --dot:#22c55e;     /* completed */
+  --dotOff:#6b7280;  /* draft */
 }
 
 *{box-sizing:border-box}
@@ -19,6 +17,7 @@ body{
   color:var(--text);
 }
 
+/* TOPBAR */
 .topbar{
   position:sticky; top:0; z-index:10;
   display:flex; justify-content:space-between; gap:12px; align-items:center;
@@ -31,8 +30,10 @@ body{
 .sub{color:var(--muted); font-size:12px; margin-top:2px}
 .topbar-right{display:flex; gap:10px}
 
+/* LAYOUT */
 .wrap{max-width:980px; margin:0 auto; padding:14px}
 
+/* CARDS */
 .card{
   background:linear-gradient(180deg,rgba(17,24,39,.82),rgba(15,23,42,.82));
   border:1px solid rgba(36,50,68,.7);
@@ -41,7 +42,9 @@ body{
   margin-bottom:12px;
 }
 .card-title{font-weight:900; font-size:18px; margin-bottom:10px}
+.hint{color:var(--muted); font-size:12px; margin-top:8px}
 
+/* BUTTONS */
 .btn{
   padding:10px 12px;
   border-radius:12px;
@@ -57,8 +60,7 @@ body{
 }
 .btn.ghost{background:transparent}
 
-.hint{color:var(--muted); font-size:12px; margin-top:8px}
-
+/* BATCH */
 .batch{display:flex; gap:10px; flex-wrap:wrap}
 .batchBtn{
   display:flex; align-items:center; gap:10px;
@@ -74,24 +76,22 @@ body{
   border-color:rgba(163,230,53,.65);
   box-shadow:0 0 0 2px rgba(163,230,53,.12) inset;
 }
-
 .dot{
   width:12px; height:12px; border-radius:999px;
   background:var(--dotOff);
-  border:2px solid rgba(255,255,255,.12); /* makes it visible */
+  border:2px solid rgba(255,255,255,.12);
   box-shadow:0 0 0 2px rgba(0,0,0,.25) inset;
 }
 .dot.on{
   background:var(--dot);
   border-color:rgba(0,0,0,.15);
 }
-
 .batchMeta{display:flex; flex-direction:column; gap:2px}
 .batchName{font-weight:900}
 .batchStatus{font-size:12px; color:var(--muted)}
-
 .batch-actions{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px}
 
+/* STICKERS */
 .stickerWrap{display:grid; grid-template-columns:1fr; gap:12px; margin-bottom:12px}
 .sticker{border-radius:14px; overflow:hidden; border:1px solid rgba(0,0,0,.12)}
 .sticker.green{background:linear-gradient(180deg, rgba(163,230,53,.95), rgba(163,230,53,.86)); color:#101113;}
@@ -123,6 +123,7 @@ body{
 .lineRow:last-child{border-bottom:none}
 .fill{font-weight:950; min-width:140px; text-align:right}
 
+/* FORMS */
 .grid2{display:grid; grid-template-columns:1fr; gap:10px}
 .field{display:flex; flex-direction:column; gap:6px}
 .field span{color:var(--muted); font-size:12px; font-weight:850}
@@ -134,8 +135,9 @@ input{
   color:var(--text);
   outline:none;
 }
-input[readonly]{opacity:.8}
+input[readonly]{opacity:.85}
 
+/* FOOTER */
 .footer{
   padding:14px 16px;
   border-top:1px solid rgba(36,50,68,.6);
