@@ -112,6 +112,27 @@ body{
   color:var(--muted);
 }
 
+/* ✅ Save Indicator pill */
+.save-indicator{
+  font-size:12px;
+  padding:6px 10px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  color:var(--muted);
+  height:38px;
+  display:flex;
+  align-items:center;
+  white-space:nowrap;
+}
+.save-indicator.saving{
+  color:var(--text);
+  border-color:rgba(255,255,255,.25);
+}
+.save-indicator.error{
+  color:#ffb4b4;
+  border-color:rgba(255,180,180,.35);
+}
+
 .table-wrap{
   width:100%;
   overflow:auto;
@@ -187,7 +208,6 @@ input.cell::placeholder{ color:rgba(167,179,201,.55); }
   border:none;
   background:none;
 }
-
 .sticker.hidden{ display:none !important; }
 
 .phcWrap{
