@@ -2,64 +2,132 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#0b0c10" />
-  <title>UnitFlow — Crash Cart Check</title>
-  <link rel="stylesheet" href="styles.css" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Crash Cart Batch</title>
+  <link rel="stylesheet" href="./styles.css" />
 </head>
-
 <body>
   <header class="topbar">
     <div class="brand">
-      <div class="brand-title">UnitFlow</div>
-      <div class="brand-sub">Crash Cart Routine Checklist</div>
+      <div class="brand-title">Providence Holy Cross</div>
+      <div class="brand-sub">Adult Crash Cart Batch</div>
     </div>
 
     <div class="top-controls">
-      <select id="departmentSelect" class="control-select" aria-label="Department">
-        <option value="">Department</option>
-        <option value="ER">ER</option>
-        <option value="ICU">ICU</option>
-        <option value="OR">OR</option>
-        <option value="TOWER">Tower Floors</option>
-        <option value="MOTHER_BABY">Mother/Baby</option>
-        <option value="XRAY">X-Ray / Imaging</option>
-        <option value="CENTRAL">Central Backup</option>
-      </select>
+      <label class="control">
+        <span>Template</span>
+        <select id="templateSelect"></select>
+      </label>
 
-      <select id="cartTypeSelect" class="control-select hidden" aria-label="Cart Type">
-        <option value="">Cart Type</option>
-        <option value="adult">Adult Crash Cart</option>
-        <option value="neonatal">Neonatal Crash Cart</option>
-        <option value="broselow">Broselow Cart</option>
-      </select>
+      <label class="control">
+        <span>Date</span>
+        <input id="dateInput" type="date" />
+      </label>
 
-      <button id="btnClear" class="control-btn hidden" type="button">Clear</button>
-      <button id="btnExport" class="control-btn hidden" type="button">Export CSV</button>
-
-      <!-- ✅ Save indicator (confidence pill) -->
-      <span id="saveIndicator" class="save-indicator hidden">Saved ✅</span>
+      <label class="control">
+        <span>Checked By</span>
+        <input id="checkedByInput" type="text" placeholder="Initials" maxlength="6" />
+      </label>
     </div>
   </header>
 
-  <main class="page">
+  <main class="grid">
+    <!-- LEFT: Entry + Live Sticker -->
     <section class="panel">
-      <div id="statusLine" class="status">Select a Department, then choose Cart Type.</div>
+      <div class="panel-title">Entry</div>
 
-      <!-- PHC label-style live sticker preview (hidden until you focus a row) -->
-      <div id="stickerPreview" class="sticker hidden"></div>
+      <div class="form">
+        <label class="field">
+          <span>Location (Area)</span>
+          <select id="locationSelect"></select>
+        </label>
 
-      <div id="checklistContainer" class="checklist"></div>
+        <label class="field">
+          <span>Cart #</span>
+          <input id="cartNumInput" type="text" placeholder="#16" />
+        </label>
 
-      <!-- Cloud status line -->
-      <div id="cloudStatus" class="cloudline">Cloud: —</div>
+        <label class="field">
+          <span>Central Exp</span>
+          <input id="centralExpInput" type="date" />
+        </label>
+
+        <label class="field">
+          <span>Med Box Exp</span>
+          <input id="medBoxExpInput" type="date" />
+        </label>
+
+        <label class="field field-wide">
+          <span>Note</span>
+          <input id="noteInput" type="text" placeholder="Replace / Missing / Sealed / etc." />
+        </label>
+
+        <div class="actions">
+          <button id="addToBatchBtn" class="btn primary">Add to Batch</button>
+          <button id="clearEntryBtn" class="btn">Clear Entry</button>
+        </div>
+      </div>
+
+      <div class="panel-title">Live Sticker Preview</div>
+      <div id="stickerPreview" class="sticker">
+        <div class="sticker-head">
+          <div class="sticker-hospital">PROVIDENCE HOLY CROSS</div>
+          <div class="sticker-title">ADULT CRASH CART</div>
+        </div>
+        <div class="sticker-row">
+          <div class="kv"><div class="k">Date</div><div class="v" id="pvDate">—</div></div>
+          <div class="kv"><div class="k">Checked By</div><div class="v" id="pvCheckedBy">—</div></div>
+        </div>
+        <div class="sticker-row">
+          <div class="kv"><div class="k">Template</div><div class="v" id="pvTemplate">—</div></div>
+        </div>
+        <div class="sticker-row">
+          <div class="kv"><div class="k">Location</div><div class="v" id="pvLocation">—</div></div>
+          <div class="kv"><div class="k">Cart #</div><div class="v" id="pvCart">—</div></div>
+        </div>
+        <div class="sticker-row">
+          <div class="kv"><div class="k">Central Exp</div><div class="v" id="pvCentral">—</div></div>
+          <div class="kv"><div class="k">Med Box Exp</div><div class="v" id="pvMedBox">—</div></div>
+        </div>
+        <div class="sticker-row">
+          <div class="kv wide"><div class="k">Note</div><div class="v" id="pvNote">—</div></div>
+        </div>
+      </div>
     </section>
 
-    <footer class="footer">
-      PHI-free • Offline-first • Cloud sync when online
-    </footer>
+    <!-- RIGHT: Batch + Submit -->
+    <section class="panel">
+      <div class="panel-title">Batch</div>
+
+      <div class="batch-meta">
+        <div><span class="muted">Items:</span> <b id="batchCount">0</b></div>
+        <div class="batch-actions">
+          <button id="submitBatchBtn" class="btn success">Submit Batch</button>
+          <button id="clearBatchBtn" class="btn danger">Clear Batch</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="batch-table">
+          <thead>
+            <tr>
+              <th>Location</th>
+              <th>Cart #</th>
+              <th>Central Exp</th>
+              <th>Med Box Exp</th>
+              <th>Checked By</th>
+              <th>Note</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="batchTbody"></tbody>
+        </table>
+      </div>
+
+      <div id="status" class="status"></div>
+    </section>
   </main>
 
-  <script type="module" src="app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
