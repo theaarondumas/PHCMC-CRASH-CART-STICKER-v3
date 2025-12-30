@@ -3,119 +3,136 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Crash Cart Batch</title>
+  <title>UnitFlow — Crash Cart Routine Checklist</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand-title">Providence Holy Cross</div>
-      <div class="brand-sub">Adult Crash Cart Batch</div>
-    </div>
 
-    <div class="top-controls">
-      <label class="control">
-        <span>Template</span>
-        <select id="templateSelect"></select>
-      </label>
-
-      <label class="control">
-        <span>Date</span>
-        <input id="dateInput" type="date" />
-      </label>
-
-      <label class="control">
-        <span>Checked By</span>
-        <input id="checkedByInput" type="text" placeholder="Initials" maxlength="6" />
-      </label>
+  <!-- Top App Header -->
+  <header class="appHeader">
+    <div class="appTitle">
+      <div class="appName">UnitFlow</div>
+      <div class="appSub">Crash Cart Routine Checklist</div>
     </div>
   </header>
 
-  <main class="grid">
-    <!-- LEFT: Entry + Live Sticker -->
-    <section class="panel">
-      <div class="panel-title">Entry</div>
+  <!-- Controls -->
+  <section class="controls">
+    <div class="controlsRow">
+      <select id="deptSelect" class="select">
+        <option value="ER">ER</option>
+        <option value="Tower/ICU">Tower/ICU</option>
+      </select>
 
-      <div class="form">
-        <label class="field">
-          <span>Location (Area)</span>
-          <select id="locationSelect"></select>
-        </label>
+      <select id="templateSelect" class="select"></select>
 
-        <label class="field">
-          <span>Cart #</span>
-          <input id="cartNumInput" type="text" placeholder="#16" />
-        </label>
+      <button id="clearEntryBtn" class="btn ghost">Clear</button>
+    </div>
 
-        <label class="field">
-          <span>Central Exp</span>
-          <input id="centralExpInput" type="date" />
-        </label>
+    <div class="controlsRow">
+      <button id="exportCsvBtn" class="btn ghost">Export CSV</button>
+      <div id="savePill" class="pill warn">Save failed</div>
+    </div>
+  </section>
 
-        <label class="field">
-          <span>Med Box Exp</span>
-          <input id="medBoxExpInput" type="date" />
-        </label>
+  <!-- Department line + Stickers -->
+  <main class="stage">
+    <div class="stageHeader">
+      <div id="deptLine">Department: ER — Adult Crash Cart</div>
+    </div>
 
-        <label class="field field-wide">
-          <span>Note</span>
-          <input id="noteInput" type="text" placeholder="Replace / Missing / Sealed / etc." />
-        </label>
+    <!-- GREEN STICKER -->
+    <section class="sticker green">
+      <div class="stickerTop">
+        <div class="stickerHospital">Providence Holy Cross Hospital</div>
+        <div class="stickerDept" id="stickerDept">ER</div>
+        <div class="stickerPhone">818-496-1190</div>
+      </div>
 
-        <div class="actions">
-          <button id="addToBatchBtn" class="btn primary">Add to Batch</button>
-          <button id="clearEntryBtn" class="btn">Clear Entry</button>
+      <div class="stickerBanner">CRASH CART CHECK</div>
+
+      <div class="row">
+        <div class="label">Location:</div>
+        <div class="value">
+          <select id="locationSelect" class="inlineSelect"></select>
         </div>
       </div>
 
-      <div class="panel-title">Live Sticker Preview</div>
-      <div id="stickerPreview" class="sticker">
-        <div class="sticker-head">
-          <div class="sticker-hospital">PROVIDENCE HOLY CROSS</div>
-          <div class="sticker-title">ADULT CRASH CART</div>
+      <div class="row">
+        <div class="label">Cart #:</div>
+        <div class="value">
+          <input id="cartNumInput" class="inlineInput" placeholder="—" />
         </div>
-        <div class="sticker-row">
-          <div class="kv"><div class="k">Date</div><div class="v" id="pvDate">—</div></div>
-          <div class="kv"><div class="k">Checked By</div><div class="v" id="pvCheckedBy">—</div></div>
+      </div>
+
+      <div class="row">
+        <div class="label">Central Exp:</div>
+        <div class="value">
+          <input id="centralExpInput" class="inlineInput" type="date" />
         </div>
-        <div class="sticker-row">
-          <div class="kv"><div class="k">Template</div><div class="v" id="pvTemplate">—</div></div>
-        </div>
-        <div class="sticker-row">
-          <div class="kv"><div class="k">Location</div><div class="v" id="pvLocation">—</div></div>
-          <div class="kv"><div class="k">Cart #</div><div class="v" id="pvCart">—</div></div>
-        </div>
-        <div class="sticker-row">
-          <div class="kv"><div class="k">Central Exp</div><div class="v" id="pvCentral">—</div></div>
-          <div class="kv"><div class="k">Med Box Exp</div><div class="v" id="pvMedBox">—</div></div>
-        </div>
-        <div class="sticker-row">
-          <div class="kv wide"><div class="k">Note</div><div class="v" id="pvNote">—</div></div>
+      </div>
+
+      <div class="row">
+        <div class="label">Med Box Exp:</div>
+        <div class="value">
+          <input id="medBoxExpInput" class="inlineInput" type="date" />
         </div>
       </div>
     </section>
 
-    <!-- RIGHT: Batch + Submit -->
-    <section class="panel">
-      <div class="panel-title">Batch</div>
+    <!-- ORANGE STICKER -->
+    <section class="sticker orange">
+      <div class="stickerBanner small">Crash Cart Check</div>
 
-      <div class="batch-meta">
-        <div><span class="muted">Items:</span> <b id="batchCount">0</b></div>
-        <div class="batch-actions">
-          <button id="submitBatchBtn" class="btn success">Submit Batch</button>
-          <button id="clearBatchBtn" class="btn danger">Clear Batch</button>
+      <div class="row">
+        <div class="label">Date:</div>
+        <div class="value">
+          <input id="dateInput" class="inlineInput" type="date" />
         </div>
       </div>
 
-      <div class="table-wrap">
-        <table class="batch-table">
+      <div class="row">
+        <div class="label">Checked By:</div>
+        <div class="value">
+          <input id="checkedByInput" class="inlineInput" placeholder="—" maxlength="6" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Notes:</div>
+        <div class="value">
+          <input id="noteInput" class="inlineInput" placeholder="—" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">Type:</div>
+        <div class="value">
+          <div id="typeValue" class="typeValue">ADULT</div>
+        </div>
+      </div>
+
+      <div class="actionsRow">
+        <button id="addToBatchBtn" class="btn solid">Add</button>
+        <button id="submitBatchBtn" class="btn solid good">Submit Batch</button>
+      </div>
+    </section>
+
+    <!-- Batch list (simple, like your needs) -->
+    <section class="batchPanel">
+      <div class="batchTop">
+        <div>Batch Items: <b id="batchCount">0</b></div>
+        <button id="clearBatchBtn" class="btn ghost danger">Clear Batch</button>
+      </div>
+      <div class="tableWrap">
+        <table class="table">
           <thead>
             <tr>
               <th>Location</th>
-              <th>Cart #</th>
-              <th>Central Exp</th>
-              <th>Med Box Exp</th>
-              <th>Checked By</th>
+              <th>Cart</th>
+              <th>Central</th>
+              <th>Med Box</th>
+              <th>By</th>
               <th>Note</th>
               <th></th>
             </tr>
