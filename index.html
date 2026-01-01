@@ -2,156 +2,64 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Crash Cart Check</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0c10" />
+  <title>UnitFlow — Crash Cart Check</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 
 <body>
-  <div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-title">UnitFlow</div>
+      <div class="brand-sub">Crash Cart Routine Checklist</div>
+    </div>
 
-    <!-- Top bar -->
-    <header class="topbar">
-      <div class="topbar__left">
-        <button id="btnBack" class="btn btn--ghost" aria-label="Back" hidden>← Back</button>
-      </div>
+    <div class="top-controls">
+      <select id="departmentSelect" class="control-select" aria-label="Department">
+        <option value="">Department</option>
+        <option value="ER">ER</option>
+        <option value="ICU">ICU</option>
+        <option value="OR">OR</option>
+        <option value="TOWER">Tower Floors</option>
+        <option value="MOTHER_BABY">Mother/Baby</option>
+        <option value="XRAY">X-Ray / Imaging</option>
+        <option value="CENTRAL">Central Backup</option>
+      </select>
 
-      <div class="topbar__center">
-        <div class="title" id="titleMain">Crash Cart Check</div>
-        <div class="subtitle" id="subtitleMain">Department → Carts → Sticker Save</div>
-      </div>
+      <select id="cartTypeSelect" class="control-select hidden" aria-label="Cart Type">
+        <option value="">Cart Type</option>
+        <option value="adult">Adult Crash Cart</option>
+        <option value="neonatal">Neonatal Crash Cart</option>
+        <option value="broselow">Broselow Cart</option>
+      </select>
 
-      <div class="topbar__right">
-        <div class="syncchip" id="syncChip">
-          <span class="dot" id="syncDot"></span>
-          <span id="syncText">Sync: …</span>
-        </div>
-      </div>
-    </header>
+      <button id="btnClear" class="control-btn hidden" type="button">Clear</button>
+      <button id="btnExport" class="control-btn hidden" type="button">Export CSV</button>
 
-    <!-- Toast -->
-    <div id="toast" class="toast" hidden></div>
+      <!-- ✅ Save indicator (confidence pill) -->
+      <span id="saveIndicator" class="save-indicator hidden">Saved ✅</span>
+    </div>
+  </header>
 
-    <!-- Views -->
-    <main class="main">
+  <main class="page">
+    <section class="panel">
+      <div id="statusLine" class="status">Select a Department, then choose Cart Type.</div>
 
-      <!-- VIEW 1: Department Select -->
-      <section id="viewDept" class="view">
-        <div class="card">
-          <h2>Select Department</h2>
+      <!-- PHC label-style live sticker preview (hidden until you focus a row) -->
+      <div id="stickerPreview" class="sticker hidden"></div>
 
-          <div class="grid">
-            <label class="field">
-              <span class="field__label">Site</span>
-              <input id="siteInput" class="input" placeholder="PHC" value="PHC" />
-            </label>
+      <div id="checklistContainer" class="checklist"></div>
 
-            <label class="field">
-              <span class="field__label">Department</span>
-              <select id="deptSelect" class="input">
-                <option value="" selected disabled>Select…</option>
-                <option value="ED">ED</option>
-                <option value="ICU">ICU</option>
-                <option value="OR">OR</option>
-                <option value="PACU">PACU</option>
-                <option value="MEDSURG">Med-Surg</option>
-                <option value="L&D">L&amp;D</option>
-                <option value="OTHER">Other</option>
-              </select>
-            </label>
-          </div>
-
-          <button id="btnContinue" class="btn btn--primary">Continue</button>
-
-          <div class="meta">
-            <div><strong>Offline-ready</strong> — saves queue automatically when offline.</div>
-            <div id="metaLastSync">Last sync: —</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- VIEW 2: Cart List -->
-      <section id="viewList" class="view" hidden>
-        <div class="card">
-          <div class="row row--space">
-            <h2 id="listHeader">Department Carts</h2>
-            <button id="btnRefresh" class="btn btn--ghost">Refresh</button>
-          </div>
-
-          <div id="emptyList" class="empty" hidden>
-            No carts yet. Add a cart template in code, or use “+ Add Cart” later.
-          </div>
-
-          <div id="cartList" class="list"></div>
-        </div>
-      </section>
-
-      <!-- VIEW 3: Cart Detail -->
-      <section id="viewDetail" class="view" hidden>
-        <div class="card">
-          <div class="row row--space">
-            <h2 id="detailHeader">Cart</h2>
-            <div class="pill" id="statusPill">—</div>
-          </div>
-
-          <!-- Sticker -->
-          <div class="sticker">
-            <div class="sticker__top">
-              <div class="sticker__brand">PHC</div>
-              <div class="sticker__id" id="stickerCartId">—</div>
-            </div>
-
-            <div class="sticker__body">
-              <label class="field">
-                <span class="field__label">Batch Code</span>
-                <input id="batchInput" class="input input--big" placeholder="Scan / type batch code" />
-              </label>
-
-              <div class="grid grid--2">
-                <div class="field">
-                  <span class="field__label">Sealed</span>
-                  <div class="seg">
-                    <button id="sealYes" class="seg__btn">SEALED ✅</button>
-                    <button id="sealNo" class="seg__btn">UNSEALED ⚠️</button>
-                  </div>
-                </div>
-
-                <div class="field">
-                  <span class="field__label">Status</span>
-                  <div class="seg">
-                    <button data-status="READY" class="seg__btn statusBtn">READY</button>
-                    <button data-status="CHECK_DUE" class="seg__btn statusBtn">CHECK DUE</button>
-                    <button data-status="DO_NOT_USE" class="seg__btn statusBtn">DO NOT USE</button>
-                  </div>
-                </div>
-              </div>
-
-              <div class="meta meta--tight" id="detailMeta">
-                Last saved: —
-              </div>
-            </div>
-          </div>
-
-          <button id="btnSave" class="btn btn--primary btn--xl">SAVE / LOCK</button>
-          <div class="meta meta--tight" id="saveHint">
-            Tip: If you’re offline, we’ll queue the save and sync automatically.
-          </div>
-        </div>
-      </section>
-
-    </main>
+      <!-- Cloud status line -->
+      <div id="cloudStatus" class="cloudline">Cloud: —</div>
+    </section>
 
     <footer class="footer">
-      <div class="footer__left">
-        <small id="footerEnv">Firestore: not connected</small>
-      </div>
-      <div class="footer__right">
-        <small id="footerDevice">Device: —</small>
-      </div>
+      PHI-free • Offline-first • Cloud sync when online
     </footer>
+  </main>
 
-  </div>
-
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
