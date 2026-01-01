@@ -1,502 +1,610 @@
-// app.js — DROP IN (UnitFlow UI + 2 Adult Lists + Batch + Firestore + CSV)
+/* =========================================================
+   UnitFlow — Department + Cart Type Checklists (PHC Style)
+   ✅ PHC label-style live sticker preview (Green + Orange)
+   ✅ Save indicator pill (Saving… / Saved ✅ / Save failed)
+   ✅ Local autosave
+   ✅ CSV export
+   ✅ Firestore realtime sync + offline persistence
+   ✅ Conflict handling + throttled writes
+========================================================= */
 
-// ===== Firebase =====
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
 import {
   getFirestore,
-  collection,
   doc,
   setDoc,
-  serverTimestamp
+  onSnapshot,
+  serverTimestamp,
+  enableIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-/**
- * PASTE YOUR FIREBASE CONFIG HERE
- * (Firebase Console -> Project Settings -> Your Apps -> Config)
- */
-const firebaseConfig = FIREBASE_CONFIG_HERE; // <-- replace this line
-
-let db = null;
-let firebaseReady = false;
-
-try {
-  const fbApp = initializeApp(firebaseConfig);
-  db = getFirestore(fbApp);
-  firebaseReady = true;
-} catch (err) {
-  console.warn("Firebase not initialized. App will run local-only until config is added.", err);
-}
-
-// ===== Templates (2 Adult Crash Cart Lists) =====
-const TEMPLATES = [
-  {
-    id: "tower_icu",
-    name: "Adult Crash Cart — Tower / ICU",
-    locations: [
-      "4 South (Tower)",
-      "4 East (Tower)",
-      "Extra Cart (4th Floor Tower)",
-      "3 South (Tower)",
-      "3 East (Tower)",
-      "Extra Cart (3rd Floor Tower)",
-      "2 South (Tower)",
-      "2 East (Tower)",
-      "Extra Cart (2nd Floor Tower)",
-      "2A (2nd Floor North)",
-      "2B (2nd Floor North)",
-      "2C (2nd Floor North)",
-      "2D (2nd Floor North)",
-      "Extra Cart (2nd Floor North)",
-      "3A (3rd Floor North)",
-      "3B (3rd Floor North)",
-      "3C (3rd Floor North)",
-      "3D (3rd Floor North)",
-      "Extra Cart (3rd Floor North)",
-      "ICU Pavilion A (1st Floor)",
-      "ICU Pavilion B (1st Floor)",
-      "ICU Pavilion C (1st Floor)"
-    ]
-  },
-  {
-    id: "er_imaging",
-    name: "Adult Crash Cart — ER / Imaging / Surgery",
-    locations: [
-      "Cardiology (ER Area)",
-      "EDX1",
-      "EDX2",
-      "ER Triage",
-      "ER Room 2",
-      "CT1 (X-Ray Dept)",
-      "CT2/MRI (X-Ray Dept)",
-      "X-Ray",
-      "Specials Room 5",
-      "Specials Room 6",
-      "Cath Lab",
-      "CT Trailer",
-      "L/D Triage (Mother/Baby)",
-      "L/D Nurse Station (Mother/Baby)",
-      "Maternity (Mother/Baby)",
-      "OR (Surgery)",
-      "Recovery (Surgery)",
-      "North Building (Physical Therapy)",
-      "Basement (GI Lab)",
-      "Central Backup Carts"
-    ]
-  }
-];
-
-// ===== Local Storage =====
-const LOCAL_KEY = "unitflow_crashcart_v4";
-
-function loadLocal() {
-  try {
-    return JSON.parse(localStorage.getItem(LOCAL_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-function saveLocal() {
-  localStorage.setItem(LOCAL_KEY, JSON.stringify(state));
-}
-
-// ===== DOM (MUST match index.html IDs) =====
-const deptSelect = document.getElementById("deptSelect");
-const templateSelect = document.getElementById("templateSelect");
-const clearEntryBtn = document.getElementById("clearEntryBtn");
-
-const exportCsvBtn = document.getElementById("exportCsvBtn");
-const savePill = document.getElementById("savePill");
-
-const deptLine = document.getElementById("deptLine");
-const stickerDept = document.getElementById("stickerDept");
-const typeValue = document.getElementById("typeValue");
-
-const locationSelect = document.getElementById("locationSelect");
-const cartNumInput = document.getElementById("cartNumInput");
-const centralExpInput = document.getElementById("centralExpInput");
-const medBoxExpInput = document.getElementById("medBoxExpInput");
-
-const dateInput = document.getElementById("dateInput");
-const checkedByInput = document.getElementById("checkedByInput");
-const noteInput = document.getElementById("noteInput");
-
-const addToBatchBtn = document.getElementById("addToBatchBtn");
-const submitBatchBtn = document.getElementById("submitBatchBtn");
-const clearBatchBtn = document.getElementById("clearBatchBtn");
-
-const batchCount = document.getElementById("batchCount");
-const batchTbody = document.getElementById("batchTbody");
-const statusEl = document.getElementById("status");
-
-// ===== State =====
-let state = {
-  department: "ER",
-  templateId: "er_imaging",
-  date: new Date().toISOString().slice(0, 10),
-  checkedBy: "",
-  entry: {
-    location: "",
-    cartNum: "",
-    centralExp: "",
-    medBoxExp: "",
-    note: ""
-  },
-  batch: []
+/* -------------------- Firebase Config -------------------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyB-3bjNKIf-00cRu3HtxdsjnM",
+  authDomain: "phcmc-crash-cart.firebaseapp.com",
+  projectId: "phcmc-crash-cart",
+  storageBucket: "phcmc-crash-cart.appspot.com",
+  messagingSenderId: "478233106614",
+  appId: "1:478233106614:web:441f55c8f401"
 };
 
-// ===== Helpers =====
-function getTemplate() {
-  return TEMPLATES.find(t => t.id === state.templateId) || TEMPLATES[0];
-}
+const firebaseReady =
+  firebaseConfig &&
+  typeof firebaseConfig.projectId === "string" &&
+  firebaseConfig.projectId.length > 0;
 
-function uid() {
-  if (crypto?.randomUUID) return crypto.randomUUID();
-  return "id_" + Math.random().toString(16).slice(2) + "_" + Date.now();
-}
+/* -------------------- DOM -------------------- */
+const departmentSelect = document.getElementById("departmentSelect");
+const cartTypeSelect = document.getElementById("cartTypeSelect");
+const checklistContainer = document.getElementById("checklistContainer");
+const statusLine = document.getElementById("statusLine");
+const btnClear = document.getElementById("btnClear");
+const btnExport = document.getElementById("btnExport");
+const stickerPreview = document.getElementById("stickerPreview");
+const cloudStatusEl = document.getElementById("cloudStatus");
+const saveIndicator = document.getElementById("saveIndicator");
 
-function escapeHtml(str) {
-  return String(str ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
+/* -------------------- PHC constants -------------------- */
+const PHC_FACILITY = "Providence Holy Cross Hospital";
+const PHC_PHONE = "818-496-1190";
 
+/* -------------------- Local storage keys -------------------- */
+function storageKey(dept, type) {
+  return `unitflow_checklist_${dept || "NONE"}_${type || "NONE"}`;
+}
+const DEVICE_KEY = "unitflow_device_id";
+
+/* -------------------- Helpers -------------------- */
 function setStatus(msg) {
-  statusEl.textContent = msg;
+  if (statusLine) statusLine.textContent = msg;
+}
+function setCloudStatus(msg) {
+  if (cloudStatusEl) cloudStatusEl.textContent = msg;
 }
 
-function setSavePill(text, mode = "warn") {
-  savePill.textContent = text;
+function setSavedState(mode) {
+  if (!saveIndicator) return;
+  saveIndicator.classList.remove("saving", "error");
 
-  // inline styles so this works even if CSS changes
-  if (mode === "ok") {
-    savePill.style.borderColor = "rgba(0,0,0,0.20)";
-    savePill.style.background = "rgba(70, 211, 122, 0.20)";
-    savePill.style.color = "#b8ffd2";
-  } else if (mode === "bad") {
-    savePill.style.borderColor = "rgba(255,0,0,0.25)";
-    savePill.style.background = "rgba(255, 77, 77, 0.18)";
-    savePill.style.color = "#ffb4b4";
-  } else {
-    savePill.style.borderColor = "rgba(255,180,180,0.20)";
-    savePill.style.background = "rgba(60, 40, 40, 0.70)";
-    savePill.style.color = "#ffb4b4";
+  if (mode === "saving") {
+    saveIndicator.textContent = "Saving…";
+    saveIndicator.classList.add("saving");
+  } else if (mode === "saved") {
+    saveIndicator.textContent = "Saved ✅";
+  } else if (mode === "error") {
+    saveIndicator.textContent = "Save failed";
+    saveIndicator.classList.add("error");
   }
 }
 
-function markDirty() {
-  saveLocal();
-  setSavePill("Not saved", "warn");
+function showSaveIndicator(show) {
+  if (!saveIndicator) return;
+  if (show) saveIndicator.classList.remove("hidden");
+  else saveIndicator.classList.add("hidden");
 }
 
-function updateHeaderLine() {
-  const templateName = getTemplate().name;
-  deptLine.textContent = `Department: ${state.department} — ${templateName}`;
-  stickerDept.textContent = state.department;
-  typeValue.textContent = "ADULT";
+function todayISO() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+function yyyymmdd() {
+  return todayISO().replaceAll("-", "");
+}
+function normalizeCode(code) {
+  return String(code || "").trim().replace(/\s+/g, "-").toUpperCase();
+}
+function deptSlug(name) {
+  return String(name || "")
+    .toUpperCase()
+    .replaceAll("&", "AND")
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
-// ===== UI Hydration =====
-function hydrateTemplates() {
-  templateSelect.innerHTML = "";
-  for (const t of TEMPLATES) {
-    const opt = document.createElement("option");
-    opt.value = t.id;
-    opt.textContent = t.name;
-    templateSelect.appendChild(opt);
+function getDeviceId() {
+  const existing = localStorage.getItem(DEVICE_KEY);
+  if (existing) return existing;
+  const id = "dev_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
+  localStorage.setItem(DEVICE_KEY, id);
+  return id;
+}
+
+function escapeCSV(val) {
+  const s = String(val ?? "");
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+/* -------------------- Cart Definitions -------------------- */
+const CART_DEFS = {
+  adult: {
+    title: "Adult Crash Cart",
+    columns: ["Area", "Cart #", "Central Exp", "Med Box Exp", "Checked By", "Notes"],
+    sections: [
+      { name: "ER Area", rows: ["Cardiology", "EDX1", "EDX2", "ER Triage", "ER Rm 2"] },
+      { name: "X-Ray Dept", rows: ["CT1", "CT2/MRI", "X-Ray", "Specials Rm 5", "Specials Rm 6", "Cath Lab", "CT Trailer"] },
+      { name: "Mother/Baby", rows: ["L/D Triage", "L/D nurse stn", "Maternity"] },
+      { name: "Surgery", rows: ["OR", "Recovery"] },
+      { name: "North Building", rows: ["Physical therapy"] },
+      { name: "Basement", rows: ["GI Lab"] },
+      { name: "Central Backup Carts", rows: ["Backup #1", "Backup #2", "Backup #3", "Backup #4"] }
+    ]
+  },
+
+  neonatal: {
+    title: "Neonatal Crash Cart",
+    columns: ["Location", "Cart #", "Central Exp", "Med Box Exp", "Checked By", "Notes"],
+    sections: [
+      { name: "Labor and Delivery", rows: ["OR Hallway", "L/D Hallway"] },
+      { name: "Mother/Baby", rows: ["NICU", "Nursery", "Maternity", "PAV C NICU"] },
+      { name: "2nd Floor", rows: ["2A", "Overflow"] },
+      { name: "Central Backup Carts", rows: ["Backup #1", "Backup #2", "Backup #3", "Backup #4", "Backup #5"] }
+    ]
+  },
+
+  broselow: {
+    title: "Broselow Cart",
+    columns: ["Area", "Cart #", "Central Exp", "Med Box Exp", "Checked By", "Notes"],
+    sections: [
+      { name: "2nd Floor", rows: ["2C", "ER", "EDX1", "EDX2", "ER Main"] },
+      { name: "Surgery", rows: ["Recovery"] },
+      { name: "North Bldg", rows: ["Physical Therapy"] },
+      { name: "Central Backup Carts", rows: ["Backup #3", "Backup #6"] }
+    ]
   }
-  templateSelect.value = state.templateId;
+};
+
+/* -------------------- State -------------------- */
+function defaultState() {
+  return {
+    rows: {},
+    meta: {
+      updatedAtLocal: Date.now(),
+      updatedByDevice: getDeviceId(),
+      dept: "",
+      cartType: ""
+    }
+  };
 }
 
-function hydrateLocations() {
-  const t = getTemplate();
-  const list = [...t.locations];
+function loadLocal(dept, type) {
+  try {
+    const raw = localStorage.getItem(storageKey(dept, type));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
-  // Keep custom location if it exists (for handwritten add-ons later)
-  if (state.entry.location && !list.includes(state.entry.location)) {
-    list.unshift(state.entry.location);
+function saveLocal(dept, type, state) {
+  try {
+    localStorage.setItem(storageKey(dept, type), JSON.stringify(state));
+  } catch {
+    // ignore
+  }
+}
+
+function touchMeta(state, dept, type) {
+  state.meta = state.meta || {};
+  state.meta.updatedAtLocal = Date.now();
+  state.meta.updatedByDevice = getDeviceId();
+  state.meta.dept = dept;
+  state.meta.cartType = type;
+}
+
+/* -------------------- Firestore Sync -------------------- */
+let db = null;
+let currentDocRef = null;
+let unsubscribe = null;
+let suppressNextCloudWrite = false;
+let saveTimer = null;
+
+function defaultBatchCode(dept) {
+  return normalizeCode(`UF-${yyyymmdd()}-${deptSlug(dept || "DEPT")}-DAY`);
+}
+
+function cloudDocId(dept, type) {
+  const base = defaultBatchCode(dept);
+  return `${base}__${deptSlug(dept)}__${String(type).toUpperCase()}`;
+}
+
+function connectFirestore() {
+  if (!firebaseReady) return;
+  const app = initializeApp(firebaseConfig);
+  db = getFirestore(app);
+  enableIndexedDbPersistence(db).catch(() => {});
+  setCloudStatus("Cloud: ready");
+}
+
+function joinCloudRoom(dept, type) {
+  if (!db) {
+    setCloudStatus("Cloud: OFF");
+    return;
   }
 
-  locationSelect.innerHTML = "";
+  const id = cloudDocId(dept, type);
 
-  const ph = document.createElement("option");
-  ph.value = "";
-  ph.textContent = "Select…";
-  locationSelect.appendChild(ph);
-
-  for (const loc of list) {
-    const opt = document.createElement("option");
-    opt.value = loc;
-    opt.textContent = loc;
-    locationSelect.appendChild(opt);
+  if (unsubscribe) {
+    unsubscribe();
+    unsubscribe = null;
   }
 
-  locationSelect.value = state.entry.location || "";
+  currentDocRef = doc(db, "unitflowChecklists", id);
+  setCloudStatus("Cloud: connecting…");
+
+  unsubscribe = onSnapshot(currentDocRef, (snap) => {
+    if (!snap.exists()) {
+      setCloudStatus("Cloud: ready • creating doc…");
+      scheduleCloudSave(true);
+      return;
+    }
+
+    const cloud = snap.data();
+    const cloudUpdated = cloud?.meta?.updatedAtLocal || 0;
+
+    const localState = loadLocal(dept, type) || defaultState();
+    const localUpdated = localState?.meta?.updatedAtLocal || 0;
+
+    if (cloudUpdated > localUpdated) {
+      suppressNextCloudWrite = true;
+      saveLocal(dept, type, cloud);
+      renderChecklist(dept, type);
+      setCloudStatus("Cloud: synced ✅");
+      setSavedState("saved");
+    } else {
+      setCloudStatus("Cloud: listening");
+    }
+  });
+
+  scheduleCloudSave(true);
 }
 
-function applyStateToInputs() {
-  deptSelect.value = state.department || "ER";
-  templateSelect.value = state.templateId || TEMPLATES[0].id;
+function scheduleCloudSave(immediate = false) {
+  if (!db || !currentDocRef) return;
 
-  dateInput.value = state.date || new Date().toISOString().slice(0, 10);
-  checkedByInput.value = state.checkedBy || "";
+  if (suppressNextCloudWrite) {
+    suppressNextCloudWrite = false;
+    return;
+  }
 
-  hydrateLocations();
+  if (saveTimer) clearTimeout(saveTimer);
+  const delay = immediate ? 0 : 450;
 
-  cartNumInput.value = state.entry.cartNum || "";
-  centralExpInput.value = state.entry.centralExp || "";
-  medBoxExpInput.value = state.entry.medBoxExp || "";
-  noteInput.value = state.entry.note || "";
+  saveTimer = setTimeout(async () => {
+    try {
+      const dept = departmentSelect?.value || "";
+      const type = cartTypeSelect?.value || "";
+      if (!dept || !type) return;
 
-  updateHeaderLine();
+      const state = loadLocal(dept, type) || defaultState();
+
+      const payload = {
+        ...state,
+        meta: {
+          ...(state.meta || {}),
+          updatedAtServer: serverTimestamp()
+        }
+      };
+
+      setSavedState("saving");
+      setCloudStatus("Cloud: saving…");
+      await setDoc(currentDocRef, payload, { merge: true });
+      setCloudStatus("Cloud: saved ✅");
+      setSavedState("saved");
+    } catch (e) {
+      setCloudStatus("Cloud: save failed (local ok)");
+      setSavedState("error");
+      console.warn("Cloud save error:", e);
+    }
+  }, delay);
 }
 
-// ===== Batch Rendering =====
-function renderBatch() {
-  batchCount.textContent = String(state.batch.length);
-  batchTbody.innerHTML = "";
+/* -------------------- PHC Sticker Preview -------------------- */
+let activeRowId = null;
+let activeRowLabel = "";
 
-  for (const item of state.batch) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml(item.location)}</td>
-      <td>${escapeHtml(item.cartNum)}</td>
-      <td>${escapeHtml(item.centralExp)}</td>
-      <td>${escapeHtml(item.medBoxExp)}</td>
-      <td>${escapeHtml(item.checkedBy)}</td>
-      <td>${escapeHtml(item.note || "")}</td>
-      <td>
-        <button class="btn ghost" data-remove="${item.id}" style="padding:8px 10px;border-radius:10px">
-          ✕
-        </button>
-      </td>
+function renderStickerPreview(dept, type, label, row) {
+  if (!stickerPreview) return;
+
+  const val = (x) => (x && String(x).trim() ? String(x) : "—");
+  const miss = (x) => (x && String(x).trim() ? "" : " miss");
+
+  const location = label || "—";
+  const cartNum = row.cart || "";
+  const central = row.central || "";
+  const medbox = row.medbox || "";
+  const checkedBy = row.checked || "";
+  const notes = row.notes || "";
+
+  stickerPreview.innerHTML = `
+    <div class="phcWrap">
+      <div class="phcSticker phcGreen">
+        <div class="phcHeader">
+          <div class="phcFacility">${PHC_FACILITY}</div>
+          <div class="phcDept">${dept}</div>
+          <div class="phcPhone">${PHC_PHONE}</div>
+        </div>
+
+        <div class="phcTitle">CRASH CART CHECK</div>
+
+        <div class="phcLines">
+          <div class="phcRow">
+            <span>Location:</span>
+            <span class="phcFill">${val(location)}</span>
+          </div>
+          <div class="phcRow">
+            <span>Cart #:</span>
+            <span class="phcFill${miss(cartNum)}">${val(cartNum)}</span>
+          </div>
+          <div class="phcRow">
+            <span>Central Exp:</span>
+            <span class="phcFill${miss(central)}">${val(central)}</span>
+          </div>
+          <div class="phcRow">
+            <span>Med Box Exp:</span>
+            <span class="phcFill${miss(medbox)}">${val(medbox)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="phcSticker phcOrange">
+        <div class="phcTitle small">Crash Cart Check</div>
+
+        <div class="phcLines">
+          <div class="phcRow">
+            <span>Checked By:</span>
+            <span class="phcFill${miss(checkedBy)}">${val(checkedBy)}</span>
+          </div>
+          <div class="phcRow">
+            <span>Notes:</span>
+            <span class="phcFill${miss(notes)}">${val(notes)}</span>
+          </div>
+          <div class="phcRow">
+            <span>Type:</span>
+            <span class="phcFill">${String(type).toUpperCase()}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  stickerPreview.classList.remove("hidden");
+}
+
+function updateStickerFromState(dept, type) {
+  if (!activeRowId || !stickerPreview) return;
+  const state = loadLocal(dept, type) || defaultState();
+  const row = (state.rows && state.rows[activeRowId]) ? state.rows[activeRowId] : {};
+  renderStickerPreview(dept, type, activeRowLabel, row);
+}
+
+/* -------------------- UI Rendering -------------------- */
+function renderChecklist(dept, type) {
+  const def = CART_DEFS[type];
+  if (!def) return;
+
+  const state = loadLocal(dept, type) || (() => {
+    const s = defaultState();
+    touchMeta(s, dept, type);
+    saveLocal(dept, type, s);
+    return s;
+  })();
+
+  setStatus(`Department: ${dept} — ${def.title}`);
+
+  const head = `
+    <div class="hrow">
+      <div class="title">${def.title}</div>
+      <div class="badge">${dept} • ${String(type).toUpperCase()}</div>
+    </div>
+  `;
+
+  const tableHead = `
+    <thead>
+      <tr>${def.columns.map(c => `<th>${c}</th>`).join("")}</tr>
+    </thead>
+  `;
+
+  let bodyHTML = `<tbody>`;
+
+  def.sections.forEach((sec, sIdx) => {
+    bodyHTML += `
+      <tr class="section-row">
+        <td colspan="${def.columns.length}">${sec.name}</td>
+      </tr>
     `;
-    batchTbody.appendChild(tr);
-  }
 
-  batchTbody.querySelectorAll("[data-remove]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const id = btn.getAttribute("data-remove");
-      state.batch = state.batch.filter(x => x.id !== id);
-      renderBatch();
-      markDirty();
-      setStatus("Removed item.");
+    sec.rows.forEach((label, rIdx) => {
+      const rowId = `${type}__${sIdx}__${rIdx}`;
+      const row = state.rows[rowId] || {};
+
+      bodyHTML += `
+        <tr data-rowid="${rowId}" data-label="${label}">
+          <td class="cell-label">${label}</td>
+          <td><input class="cell" data-field="cart" placeholder="#" value="${row.cart || ""}"></td>
+          <td><input class="cell" data-field="central" placeholder="MM-DD-YY" value="${row.central || ""}"></td>
+          <td><input class="cell" data-field="medbox" placeholder="MM-DD-YY" value="${row.medbox || ""}"></td>
+          <td><input class="cell" data-field="checked" placeholder="Initials" value="${row.checked || ""}"></td>
+          <td><input class="cell" data-field="notes" placeholder="Note" value="${row.notes || ""}"></td>
+        </tr>
+      `;
     });
+  });
+
+  bodyHTML += `</tbody>`;
+
+  checklistContainer.innerHTML = `
+    ${head}
+    <div class="table-wrap">
+      <table>
+        ${tableHead}
+        ${bodyHTML}
+      </table>
+    </div>
+  `;
+
+  attachAutosave(dept, type);
+  updateStickerFromState(dept, type);
+}
+
+function attachAutosave(dept, type) {
+  const table = checklistContainer.querySelector("table");
+  if (!table) return;
+
+  table.addEventListener("focusin", (e) => {
+    const tr = e.target.closest("tr[data-rowid]");
+    if (!tr) return;
+    activeRowId = tr.getAttribute("data-rowid");
+    activeRowLabel = tr.getAttribute("data-label") || "";
+    updateStickerFromState(dept, type);
+  });
+
+  table.addEventListener("input", (e) => {
+    const input = e.target;
+    if (!(input instanceof HTMLInputElement)) return;
+
+    const tr = input.closest("tr[data-rowid]");
+    if (!tr) return;
+
+    const rowId = tr.getAttribute("data-rowid");
+    const field = input.getAttribute("data-field");
+    if (!rowId || !field) return;
+
+    const state = loadLocal(dept, type) || defaultState();
+    state.rows = state.rows || {};
+    state.rows[rowId] = state.rows[rowId] || {};
+    state.rows[rowId][field] = input.value;
+
+    touchMeta(state, dept, type);
+
+    setSavedState("saving");
+    saveLocal(dept, type, state);
+    setSavedState("saved");
+
+    updateStickerFromState(dept, type);
+    scheduleCloudSave(false);
   });
 }
 
-// ===== Validation =====
-function validateEntry() {
-  if (!state.entry.location) return "Pick Location.";
-  if (!state.entry.cartNum) return "Enter Cart #.";
-  if (!state.entry.centralExp) return "Enter Central Exp.";
-  if (!state.entry.medBoxExp) return "Enter Med Box Exp.";
-  if (!state.checkedBy) return "Enter Checked By initials.";
-  return "";
-}
+/* -------------------- CSV Export -------------------- */
+function exportCSV(dept, type) {
+  const def = CART_DEFS[type];
+  const state = loadLocal(dept, type) || defaultState();
 
-// ===== Events =====
-deptSelect.addEventListener("change", () => {
-  state.department = deptSelect.value;
-  updateHeaderLine();
-  markDirty();
-});
+  const lines = [];
+  lines.push(["Department", "Cart Type", ...def.columns].map(escapeCSV).join(","));
 
-templateSelect.addEventListener("change", () => {
-  state.templateId = templateSelect.value;
-  state.entry.location = ""; // reset for new template
-  hydrateLocations();
-  updateHeaderLine();
-  markDirty();
-});
+  def.sections.forEach((sec, sIdx) => {
+    lines.push([dept, type, sec.name, "", "", "", "", ""].map(escapeCSV).join(","));
 
-dateInput.addEventListener("change", () => {
-  state.date = dateInput.value;
-  markDirty();
-});
+    sec.rows.forEach((label, rIdx) => {
+      const rowId = `${type}__${sIdx}__${rIdx}`;
+      const row = state.rows[rowId] || {};
 
-checkedByInput.addEventListener("input", () => {
-  state.checkedBy = checkedByInput.value.trim();
-  markDirty();
-});
+      lines.push([
+        dept,
+        type,
+        label,
+        row.cart || "",
+        row.central || "",
+        row.medbox || "",
+        row.checked || "",
+        row.notes || ""
+      ].map(escapeCSV).join(","));
+    });
+  });
 
-locationSelect.addEventListener("change", () => {
-  state.entry.location = locationSelect.value;
-  markDirty();
-});
-
-cartNumInput.addEventListener("input", () => {
-  state.entry.cartNum = cartNumInput.value.trim();
-  markDirty();
-});
-
-centralExpInput.addEventListener("change", () => {
-  state.entry.centralExp = centralExpInput.value;
-  markDirty();
-});
-
-medBoxExpInput.addEventListener("change", () => {
-  state.entry.medBoxExp = medBoxExpInput.value;
-  markDirty();
-});
-
-noteInput.addEventListener("input", () => {
-  state.entry.note = noteInput.value.trim();
-  markDirty();
-});
-
-clearEntryBtn.addEventListener("click", () => {
-  state.entry = { location: "", cartNum: "", centralExp: "", medBoxExp: "", note: "" };
-  hydrateLocations();
-  cartNumInput.value = "";
-  centralExpInput.value = "";
-  medBoxExpInput.value = "";
-  noteInput.value = "";
-  markDirty();
-  setStatus("Cleared entry.");
-});
-
-addToBatchBtn.addEventListener("click", () => {
-  const err = validateEntry();
-  if (err) {
-    setStatus(err);
-    setSavePill("Save failed", "bad");
-    return;
-  }
-
-  const item = {
-    id: uid(),
-    department: state.department,
-    templateId: state.templateId,
-    templateName: getTemplate().name,
-    date: state.date,
-    location: state.entry.location,
-    cartNum: state.entry.cartNum,
-    centralExp: state.entry.centralExp,
-    medBoxExp: state.entry.medBoxExp,
-    checkedBy: state.checkedBy,
-    note: state.entry.note || ""
-  };
-
-  state.batch.unshift(item);
-
-  // Keep location selected (location-first). Clear cart-specific fields.
-  state.entry.cartNum = "";
-  state.entry.centralExp = "";
-  state.entry.medBoxExp = "";
-  state.entry.note = "";
-
-  cartNumInput.value = "";
-  centralExpInput.value = "";
-  medBoxExpInput.value = "";
-  noteInput.value = "";
-
-  renderBatch();
-  markDirty();
-  setStatus("Added to batch.");
-});
-
-clearBatchBtn.addEventListener("click", () => {
-  state.batch = [];
-  renderBatch();
-  markDirty();
-  setStatus("Cleared batch.");
-});
-
-// ===== Export CSV =====
-exportCsvBtn.addEventListener("click", () => {
-  const rows = [
-    ["date","department","template","location","cartNum","centralExp","medBoxExp","checkedBy","note"],
-    ...state.batch.map(i => [
-      i.date,
-      i.department,
-      i.templateName,
-      i.location,
-      i.cartNum,
-      i.centralExp,
-      i.medBoxExp,
-      i.checkedBy,
-      i.note
-    ])
-  ];
-
-  const csv = rows
-    .map(r => r.map(x => `"${String(x ?? "").replaceAll('"','""')}"`).join(","))
-    .join("\n");
-
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const csv = lines.join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
+
+  const ts = new Date().toISOString().slice(0, 10);
+  const filename = `unitflow_${dept}_${type}_${ts}.csv`;
 
   const a = document.createElement("a");
   a.href = url;
-  a.download = `crash_cart_batch_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = filename;
+  document.body.appendChild(a);
   a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
-  URL.revokeObjectURL(url);
-  setStatus("Exported CSV.");
+/* -------------------- Wiring -------------------- */
+function resetUI() {
+  cartTypeSelect.classList.add("hidden");
+  btnClear.classList.add("hidden");
+  btnExport.classList.add("hidden");
+  checklistContainer.innerHTML = "";
+  setStatus("Select a Department, then choose Cart Type.");
+  setCloudStatus("Cloud: —");
+
+  if (stickerPreview) stickerPreview.classList.add("hidden");
+  activeRowId = null;
+  activeRowLabel = "";
+  showSaveIndicator(false);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  connectFirestore();
+  resetUI();
+
+  departmentSelect.addEventListener("change", () => {
+    const dept = departmentSelect.value;
+
+    if (!dept) {
+      cartTypeSelect.value = "";
+      resetUI();
+      return;
+    }
+
+    cartTypeSelect.classList.remove("hidden");
+    setStatus(`Department: ${dept} — choose Cart Type.`);
+  });
+
+  cartTypeSelect.addEventListener("change", () => {
+    const dept = departmentSelect.value;
+    const type = cartTypeSelect.value;
+
+    if (!dept || !type) return;
+
+    btnClear.classList.remove("hidden");
+    btnExport.classList.remove("hidden");
+    showSaveIndicator(true);
+    setSavedState("saved");
+
+    renderChecklist(dept, type);
+    joinCloudRoom(dept, type);
+  });
+
+  btnClear.addEventListener("click", () => {
+    const dept = departmentSelect.value;
+    const type = cartTypeSelect.value;
+    if (!dept || !type) return;
+
+    const ok = confirm("Clear all entries for this Department + Cart Type on this device?");
+    if (!ok) return;
+
+    localStorage.removeItem(storageKey(dept, type));
+    setSavedState("saving");
+    renderChecklist(dept, type);
+    scheduleCloudSave(false);
+    setSavedState("saved");
+
+    if (stickerPreview) stickerPreview.classList.add("hidden");
+    activeRowId = null;
+    activeRowLabel = "";
+  });
+
+  btnExport.addEventListener("click", () => {
+    const dept = departmentSelect.value;
+    const type = cartTypeSelect.value;
+    if (!dept || !type) return;
+    exportCSV(dept, type);
+  });
 });
-
-// ===== Submit Batch to Firestore =====
-submitBatchBtn.addEventListener("click", async () => {
-  if (state.batch.length === 0) {
-    setStatus("Batch is empty.");
-    return;
-  }
-
-  if (!firebaseReady || !db) {
-    setStatus("Firebase not set up. Paste firebaseConfig in app.js.");
-    setSavePill("Save failed", "bad");
-    return;
-  }
-
-  try {
-    setStatus("Submitting batch…");
-
-    const batchId = `batch_${new Date().toISOString()}_${Math.random().toString(16).slice(2,8)}`;
-    const ref = doc(collection(db, "crash_cart_batches"), batchId);
-
-    await setDoc(ref, {
-      batchId,
-      department: state.department,
-      templateId: state.templateId,
-      templateName: getTemplate().name,
-      date: state.date,
-      checkedBy: state.checkedBy,
-      itemCount: state.batch.length,
-      items: state.batch,
-      createdAt: serverTimestamp()
-    });
-
-    state.batch = [];
-    renderBatch();
-    saveLocal();
-
-    setStatus("Batch submitted ✅");
-    setSavePill("Saved", "ok");
-  } catch (e) {
-    console.error(e);
-    setStatus("Submit failed. Check Firestore rules / config / internet.");
-    setSavePill("Save failed", "bad");
-  }
-});
-
-// ===== Init =====
-(function init() {
-  const saved = loadLocal();
-  state = { ...state, ...saved };
-
-  if (!state.date) state.date = new Date().toISOString().slice(0, 10);
-  if (!state.department) state.department = "ER";
-  if (!state.templateId) state.templateId = "er_imaging";
-  if (!state.entry) state.entry = { location: "", cartNum: "", centralExp: "", medBoxExp: "", note: "" };
-  if (!Array.isArray(state.batch)) state.batch = [];
-
-  hydrateTemplates();
-  applyStateToInputs();
-  renderBatch();
-
-  setStatus(firebaseReady ? "Ready." : "Ready (local only — add Firebase config for cloud).");
-  setSavePill("Not saved", "warn");
-})();
