@@ -3,147 +3,154 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>UnitFlow — Crash Cart Routine Checklist</title>
+  <title>Crash Cart Check</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
+
 <body>
+  <div class="app">
 
-  <!-- Top App Header -->
-  <header class="appHeader">
-    <div class="appTitle">
-      <div class="appName">UnitFlow</div>
-      <div class="appSub">Crash Cart Routine Checklist</div>
-    </div>
-  </header>
-
-  <!-- Controls -->
-  <section class="controls">
-    <div class="controlsRow">
-      <select id="deptSelect" class="select">
-        <option value="ER">ER</option>
-        <option value="Tower/ICU">Tower/ICU</option>
-      </select>
-
-      <select id="templateSelect" class="select"></select>
-
-      <button id="clearEntryBtn" class="btn ghost">Clear</button>
-    </div>
-
-    <div class="controlsRow">
-      <button id="exportCsvBtn" class="btn ghost">Export CSV</button>
-      <div id="savePill" class="pill warn">Save failed</div>
-    </div>
-  </section>
-
-  <!-- Department line + Stickers -->
-  <main class="stage">
-    <div class="stageHeader">
-      <div id="deptLine">Department: ER — Adult Crash Cart</div>
-    </div>
-
-    <!-- GREEN STICKER -->
-    <section class="sticker green">
-      <div class="stickerTop">
-        <div class="stickerHospital">Providence Holy Cross Hospital</div>
-        <div class="stickerDept" id="stickerDept">ER</div>
-        <div class="stickerPhone">818-496-1190</div>
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="topbar__left">
+        <button id="btnBack" class="btn btn--ghost" aria-label="Back" hidden>← Back</button>
       </div>
 
-      <div class="stickerBanner">CRASH CART CHECK</div>
+      <div class="topbar__center">
+        <div class="title" id="titleMain">Crash Cart Check</div>
+        <div class="subtitle" id="subtitleMain">Department → Carts → Sticker Save</div>
+      </div>
 
-      <div class="row">
-        <div class="label">Location:</div>
-        <div class="value">
-          <select id="locationSelect" class="inlineSelect"></select>
+      <div class="topbar__right">
+        <div class="syncchip" id="syncChip">
+          <span class="dot" id="syncDot"></span>
+          <span id="syncText">Sync: …</span>
         </div>
       </div>
+    </header>
 
-      <div class="row">
-        <div class="label">Cart #:</div>
-        <div class="value">
-          <input id="cartNumInput" class="inlineInput" placeholder="—" />
+    <!-- Toast -->
+    <div id="toast" class="toast" hidden></div>
+
+    <!-- Views -->
+    <main class="main">
+
+      <!-- VIEW 1: Department Select -->
+      <section id="viewDept" class="view">
+        <div class="card">
+          <h2>Select Department</h2>
+
+          <div class="grid">
+            <label class="field">
+              <span class="field__label">Site</span>
+              <input id="siteInput" class="input" placeholder="PHC" value="PHC" />
+            </label>
+
+            <label class="field">
+              <span class="field__label">Department</span>
+              <select id="deptSelect" class="input">
+                <option value="" selected disabled>Select…</option>
+                <option value="ED">ED</option>
+                <option value="ICU">ICU</option>
+                <option value="OR">OR</option>
+                <option value="PACU">PACU</option>
+                <option value="MEDSURG">Med-Surg</option>
+                <option value="L&D">L&amp;D</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </label>
+          </div>
+
+          <button id="btnContinue" class="btn btn--primary">Continue</button>
+
+          <div class="meta">
+            <div><strong>Offline-ready</strong> — saves queue automatically when offline.</div>
+            <div id="metaLastSync">Last sync: —</div>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div class="row">
-        <div class="label">Central Exp:</div>
-        <div class="value">
-          <input id="centralExpInput" class="inlineInput" type="date" />
+      <!-- VIEW 2: Cart List -->
+      <section id="viewList" class="view" hidden>
+        <div class="card">
+          <div class="row row--space">
+            <h2 id="listHeader">Department Carts</h2>
+            <button id="btnRefresh" class="btn btn--ghost">Refresh</button>
+          </div>
+
+          <div id="emptyList" class="empty" hidden>
+            No carts yet. Add a cart template in code, or use “+ Add Cart” later.
+          </div>
+
+          <div id="cartList" class="list"></div>
         </div>
-      </div>
+      </section>
 
-      <div class="row">
-        <div class="label">Med Box Exp:</div>
-        <div class="value">
-          <input id="medBoxExpInput" class="inlineInput" type="date" />
+      <!-- VIEW 3: Cart Detail -->
+      <section id="viewDetail" class="view" hidden>
+        <div class="card">
+          <div class="row row--space">
+            <h2 id="detailHeader">Cart</h2>
+            <div class="pill" id="statusPill">—</div>
+          </div>
+
+          <!-- Sticker -->
+          <div class="sticker">
+            <div class="sticker__top">
+              <div class="sticker__brand">PHC</div>
+              <div class="sticker__id" id="stickerCartId">—</div>
+            </div>
+
+            <div class="sticker__body">
+              <label class="field">
+                <span class="field__label">Batch Code</span>
+                <input id="batchInput" class="input input--big" placeholder="Scan / type batch code" />
+              </label>
+
+              <div class="grid grid--2">
+                <div class="field">
+                  <span class="field__label">Sealed</span>
+                  <div class="seg">
+                    <button id="sealYes" class="seg__btn">SEALED ✅</button>
+                    <button id="sealNo" class="seg__btn">UNSEALED ⚠️</button>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <span class="field__label">Status</span>
+                  <div class="seg">
+                    <button data-status="READY" class="seg__btn statusBtn">READY</button>
+                    <button data-status="CHECK_DUE" class="seg__btn statusBtn">CHECK DUE</button>
+                    <button data-status="DO_NOT_USE" class="seg__btn statusBtn">DO NOT USE</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="meta meta--tight" id="detailMeta">
+                Last saved: —
+              </div>
+            </div>
+          </div>
+
+          <button id="btnSave" class="btn btn--primary btn--xl">SAVE / LOCK</button>
+          <div class="meta meta--tight" id="saveHint">
+            Tip: If you’re offline, we’ll queue the save and sync automatically.
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- ORANGE STICKER -->
-    <section class="sticker orange">
-      <div class="stickerBanner small">Crash Cart Check</div>
+    </main>
 
-      <div class="row">
-        <div class="label">Date:</div>
-        <div class="value">
-          <input id="dateInput" class="inlineInput" type="date" />
-        </div>
+    <footer class="footer">
+      <div class="footer__left">
+        <small id="footerEnv">Firestore: not connected</small>
       </div>
+      <div class="footer__right">
+        <small id="footerDevice">Device: —</small>
+      </div>
+    </footer>
 
-      <div class="row">
-        <div class="label">Checked By:</div>
-        <div class="value">
-          <input id="checkedByInput" class="inlineInput" placeholder="—" maxlength="6" />
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="label">Notes:</div>
-        <div class="value">
-          <input id="noteInput" class="inlineInput" placeholder="—" />
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="label">Type:</div>
-        <div class="value">
-          <div id="typeValue" class="typeValue">ADULT</div>
-        </div>
-      </div>
-
-      <div class="actionsRow">
-        <button id="addToBatchBtn" class="btn solid">Add</button>
-        <button id="submitBatchBtn" class="btn solid good">Submit Batch</button>
-      </div>
-    </section>
-
-    <!-- Batch list (simple, like your needs) -->
-    <section class="batchPanel">
-      <div class="batchTop">
-        <div>Batch Items: <b id="batchCount">0</b></div>
-        <button id="clearBatchBtn" class="btn ghost danger">Clear Batch</button>
-      </div>
-      <div class="tableWrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Location</th>
-              <th>Cart</th>
-              <th>Central</th>
-              <th>Med Box</th>
-              <th>By</th>
-              <th>Note</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="batchTbody"></tbody>
-        </table>
-      </div>
-
-      <div id="status" class="status"></div>
-    </section>
-  </main>
+  </div>
 
   <script type="module" src="./app.js"></script>
 </body>
